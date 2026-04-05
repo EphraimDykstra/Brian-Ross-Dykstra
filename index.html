@@ -1256,8 +1256,8 @@ function updateAimArrow(dAz, dAlt) {
     const clampScale = Math.min(1, R / (Math.sqrt(rawX*rawX + rawY*rawY) || 1));
     const x = rawX * clampScale, y = rawY * clampScale;
 
-    // Angle from star-position toward center: opposite of the outer-arrow angle
-    const angleDeg = Math.atan2(-dAz, -dAlt) * (180 / Math.PI);
+    // Point arrow in direction to move phone to center the star
+    const angleDeg = Math.atan2(dAz, dAlt) * (180 / Math.PI);
 
     arrow.style.display   = 'flex';
     arrow.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${angleDeg}deg)`;
