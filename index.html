@@ -1059,9 +1059,6 @@ function loop() {
 
     azEl.className  = altEl.className = 'val ' + (lock ? 'locked' : close ? 'gold' : 'amber');
 
-    updateArrows(dAz, dAlt);
-    updateAimArrow(dAz, dAlt);
-
     if (lock && !locked) { locked = true;  setLocked(true);  }
     if (!lock && locked) { locked = false; setLocked(false); }
 
@@ -1080,10 +1077,15 @@ function loop() {
         status.textContent = 'Star does not rise from your location tonight';
       }
       status.classList.remove('locked-status');
-    } else if (lock) {
+    } else {
+      updateArrows(dAz, dAlt);
+      updateAimArrow(dAz, dAlt);
+    }
+
+    if (lock) {
       status.textContent = 'Locked on Brian\'s Star';
       status.classList.add('locked-status');
-    } else {
+    } else if (!belowHorizon) {
       const parts = [];
       if (dAz  >  5) parts.push('Turn right');
       if (dAz  < -5) parts.push('Turn left');
