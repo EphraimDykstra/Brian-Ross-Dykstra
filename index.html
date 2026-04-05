@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Brian Ross Dykstra">
+<meta name="theme-color" content="#0a0700">
+<meta name="description" content="A memorial star tracker for Brian Ross Dykstra — his star in the constellation Columba.">
+<link rel="manifest" href="manifest.json">
+<title>Brian Ross Dykstra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Josefin+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0a0700;
+  --bg2:       #110e02;
+  --gold:      #f5c842;
+  --gold-dim:  #c9a030;
+  --gold-glow: rgba(245, 200, 66, 0.18);
+  --gold-faint:rgba(245, 200, 66, 0.07);
+  --amber:     #e8922a;
+  --warm-white:#fef3d0;
+  --muted:     rgba(254, 243, 208, 0.38);
+  --border:    rgba(245, 200, 66, 0.15);
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-sans:  'Josefin Sans', sans-serif;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--warm-white);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ===== STARFIELD ===== */
+#sf { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+#sf canvas { width: 100%; height: 100%; display: block; }
+
+/* ===== CAMERA ===== */
+#cam {
+  position: fixed; inset: 0; z-index: 1;
+  object-fit: cover; width: 100%; height: 100%;
+  opacity: 0; transition: opacity 0.8s ease;
+}
+#cam.on { opacity: 0.5; }
+
+/* ===== VIGNETTE ===== */
+.vig {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none;
+  background:
+    radial-gradient(ellipse at center, transparent 20%, rgba(10,7,0,0.82) 100%),
+    radial-gradient(ellipse at top, transparent 40%, rgba(10,7,0,0.5) 100%);
+}
+
+/* ===== GRAIN ===== */
+.grain {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+/* ===== SCREENS ===== */
+.screen {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 32px 24px;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.screen.gone { opacity: 0; pointer-events: none; transform: translateY(16px); }
+
+/* ===== INTRO SCREEN ===== */
+#s-intro { gap: 28px; }
+
+.intro-glow {
+  position: absolute;
+  width: 320px; height: 320px;
+  background: radial-gradient(circle, rgba(245,200,66,0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: breathe 4s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,100% { transform: scale(1); opacity: 0.7; }
+  50%      { transform: scale(1.12); opacity: 1; }
+}
+
+.star-icon-intro {
+  position: relative; z-index: 1;
+  animation: float 6s ease-in-out infinite;
+}
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+.star-icon-intro svg { filter: drop-shadow(0 0 18px rgba(245,200,66,0.6)); }
+
+.intro-name {
+  font-family: var(--font-serif);
+  font-size: clamp(1.7rem, 6vw, 2.4rem);
+  font-weight: 300;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--warm-white);
+  position: relative; z-index: 1;
+}
+.intro-name em {
+  display: block;
+  font-style: italic;
+  color: var(--gold);
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
+  margin-top: 4px;
+  font-weight: 300;
+}
+
+.intro-sub {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.8;
+}
+
+.divider {
+  width: 80px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+}
+
+.coords-display {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-align: center;
+  line-height: 2;
+  background: var(--gold-faint);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 20px;
+  width: 100%; max-width: 340px;
+}
+.coords-display span { color: var(--gold-dim); }
+
+.btn-begin {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  border-radius: 3px;
+  padding: 16px 40px;
+  cursor: pointer;
+  width: 100%; max-width: 340px;
+  transition: background 0.25s, color 0.25s, box-shadow 0.25s;
+  position: relative; overflow: hidden;
+}
+.btn-begin::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(245,200,66,0.08), transparent);
+  opacity: 0; transition: opacity 0.25s;
+}
+.btn-begin:hover::before, .btn-begin:active::before { opacity: 1; }
+.btn-begin:active { transform: scale(0.98); }
+
+.perm-note {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+}
+
+/* ===== TRACKER SCREEN ===== */
+#s-track { justify-content: space-between; padding: 0; }
+
+/* Header */
+.trk-header {
+  width: 100%;
+  padding: 52px 22px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  position: relative; z-index: 5;
+}
+.trk-title {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: 300;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  color: var(--warm-white);
+}
+.trk-title em {
+  display: block;
+  font-style: italic;
+  font-size: 0.72em;
+  color: var(--gold-dim);
+  letter-spacing: 0.08em;
+}
+.btn-reset {
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(245,200,66,0.06);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 3px;
+  padding: 8px 13px;
+  cursor: pointer;
+}
+
+/* Aim area */
+.aim {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; width: 100%;
+}
+
+.reticle {
+  position: relative;
+  width: 260px; height: 260px;
+  display: flex; align-items: center; justify-content: center;
+}
+@media (min-height: 780px) {
+  .reticle { width: 300px; height: 300px; }
+}
+
+/* Rings */
+.ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(245,200,66,0.2);
+  transition: border-color 0.4s, box-shadow 0.4s;
+}
+.ring-1 { width: 100%; height: 100%; animation: pulse-r 4s ease-in-out infinite; }
+.ring-2 { width: 66%;  height: 66%;  animation: pulse-r 4s ease-in-out infinite 0.5s; }
+.ring-3 { width: 33%;  height: 33%;  border-color: rgba(245,200,66,0.35); }
+@keyframes pulse-r {
+  0%,100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+.ring.locked {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 24px rgba(245,200,66,0.35), inset 0 0 24px rgba(245,200,66,0.05);
+}
+
+/* Crosshair */
+.cross { position: absolute; background: rgba(245,200,66,0.25); transition: background 0.4s; }
+.cross-h { width: 100%; height: 1px; }
+.cross-v { height: 100%; width: 1px; }
+.cross.locked { background: rgba(245,200,66,0.7); }
+
+/* Corner marks */
+.corner {
+  position: absolute;
+  width: 14px; height: 14px;
+  border-color: rgba(245,200,66,0.45);
+  border-style: solid;
+  transition: border-color 0.4s;
+}
+.corner.locked { border-color: var(--gold) !important; }
+.c-tl { top: 0; left: 0;  border-width: 1px 0 0 1px; }
+.c-tr { top: 0; right: 0; border-width: 1px 1px 0 0; }
+.c-bl { bottom: 0; left: 0;  border-width: 0 0 1px 1px; }
+.c-br { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+/* Direction arrows */
+.arrows { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+.arr {
+  position: absolute;
+  font-size: 1.2rem;
+  color: var(--gold);
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+.arr-L { left: -34px;  top: 50%; transform: translateY(-50%); }
+.arr-R { right: -34px; top: 50%; transform: translateY(-50%); }
+.arr-U { top: -38px;   left: 50%; transform: translateX(-50%); }
+.arr-D { bottom: -38px; left: 50%; transform: translateX(-50%); }
+
+/* Center dot */
+.dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  box-shadow: 0 0 10px var(--gold-dim);
+  position: relative; z-index: 3;
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.dot.locked {
+  background: var(--gold);
+  box-shadow: 0 0 22px var(--gold), 0 0 48px rgba(245,200,66,0.3);
+}
+
+/* Lock flash */
+@keyframes lflash {
+  0%   { opacity: 0; transform: scale(0.85); }
+  25%  { opacity: 0.9; }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+.lock-flash {
+  position: absolute;
+  width: 100%; height: 100%;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  opacity: 0; pointer-events: none;
+}
+.lock-flash.fire { animation: lflash 1s ease-out forwards; }
+
+/* Star symbol at center when locked */
+.star-locked {
+  position: absolute;
+  width: 22px; height: 22px;
+  opacity: 0;
+  transition: opacity 0.5s;
+  z-index: 4;
+}
+.star-locked.show { opacity: 1; }
+.star-locked svg { filter: drop-shadow(0 0 8px var(--gold)); }
+
+/* ===== DATA PANEL ===== */
+.panel {
+  width: 100%;
+  padding: 14px 18px 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cell {
+  background: rgba(17,14,2,0.82);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 11px 13px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.cell.wide { grid-column: 1 / -1; }
+.lbl {
+  font-size: 0.56rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.val {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--warm-white);
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.val.gold   { color: var(--gold); }
+.val.amber  { color: var(--amber); }
+.val.locked { color: var(--gold); }
+
+.status-cell {
+  grid-column: 1 / -1;
+  background: rgba(17,14,2,0.82);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 12px;
+  text-align: center;
+  font-size: 0.65rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color 0.4s, border-color 0.4s;
+}
+.status-cell.locked-status {
+  color: var(--gold);
+  border-color: rgba(245,200,66,0.4);
+  text-shadow: 0 0 12px rgba(245,200,66,0.5);
+}
+
+/* ===== CAMERA BUTTON ===== */
+#cam-btn {
+  position: fixed;
+  top: 56px; right: 18px;
+  z-index: 20;
+  background: rgba(17,14,2,0.75);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 7px 11px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  display: none;
+}
+
+/* ===== BELOW HORIZON ===== */
+#hz-warn {
+  position: fixed;
+  bottom: 56%;
+  left: 50%; transform: translateX(-50%);
+  background: rgba(232,146,42,0.12);
+  border: 1px solid rgba(232,146,42,0.35);
+  border-radius: 3px;
+  padding: 8px 18px;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--amber);
+  white-space: nowrap;
+  z-index: 15;
+  display: none;
+}
+
+/* ===== PERMISSION ERROR ===== */
+#perm-err {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(10,7,0,0.94);
+  display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px; padding: 36px;
+  text-align: center;
+}
+#perm-err.show { display: flex; }
+#perm-err h2 {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: var(--amber);
+}
+#perm-err p {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.8;
+  max-width: 320px;
+}
+#perm-err button {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--gold-dim);
+  color: var(--gold);
+  border-radius: 3px;
+  padding: 13px 28px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<div id="sf"><canvas id="sfc"></canvas></div>
+<video id="cam" autoplay playsinline muted></video>
+<div class="vig"></div>
+<div class="grain"></div>
+
+<!-- ===================================================
+     INTRO SCREEN
+==================================================== -->
+<div class="screen" id="s-intro">
+  <div class="intro-glow"></div>
+
+  <div class="star-icon-intro">
+    <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+      <polygon points="26,2 31.2,19.8 50,19.8 35.4,30.6 40.6,48.4 26,37.6 11.4,48.4 16.6,30.6 2,19.8 20.8,19.8"
+               fill="none" stroke="#f5c842" stroke-width="1.2"/>
+      <polygon points="26,10 29.4,21.2 41.5,21.2 31.6,27.8 35,39 26,32.4 17,39 20.4,27.8 10.5,21.2 22.6,21.2"
+               fill="rgba(245,200,66,0.18)"/>
+      <circle cx="26" cy="26" r="3" fill="#f5c842" opacity="0.9"/>
+    </svg>
+  </div>
+
+  <div class="intro-name">
+    Brian Ross Dykstra
+    <em>His Star in the Sky</em>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="intro-sub">
+    Constellation Columba<br>
+    Named in memoriam
+  </div>
+
+  <div class="coords-display">
+    <span>Right Ascension</span>&nbsp;&nbsp;06h 03m 18.55s<br>
+    <span>Declination</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;-29&deg; 39&prime; 39.6&Prime;<br>
+    <span>Constellation</span>&nbsp;&nbsp;&nbsp;&nbsp;Columba
+  </div>
+
+  <button class="btn-begin" id="btn-begin">Find His Star</button>
+
+  <div class="perm-note">
+    Requires location and device motion.<br>
+    Open in Safari on iPhone and allow permissions when prompted.
+  </div>
+</div>
+
+<!-- ===================================================
+     TRACKER SCREEN
+==================================================== -->
+<div class="screen gone" id="s-track">
+  <div class="trk-header">
+    <div class="trk-title">
+      Brian Ross Dykstra
+      <em>Constellation Columba</em>
+    </div>
+    <button class="btn-reset" id="btn-reset">Back</button>
+  </div>
+
+  <div class="aim">
+    <div class="reticle" id="reticle">
+      <div class="ring ring-1" id="r1"></div>
+      <div class="ring ring-2" id="r2"></div>
+      <div class="ring ring-3" id="r3"></div>
+      <div class="cross cross-h" id="ch"></div>
+      <div class="cross cross-v" id="cv"></div>
+      <div class="corner c-tl" id="ctl"></div>
+      <div class="corner c-tr" id="ctr"></div>
+      <div class="corner c-bl" id="cbl"></div>
+      <div class="corner c-br" id="cbr"></div>
+      <div class="arrows">
+        <div class="arr arr-L" id="aL">&#9664;</div>
+        <div class="arr arr-R" id="aR">&#9654;</div>
+        <div class="arr arr-U" id="aU">&#9650;</div>
+        <div class="arr arr-D" id="aD">&#9660;</div>
+      </div>
+      <div class="lock-flash" id="lflash"></div>
+      <div class="star-locked" id="slocked">
+        <svg viewBox="0 0 24 24" fill="none">
+          <polygon points="12,1 14.5,8.5 22.5,8.5 16,13.5 18.5,21 12,16.5 5.5,21 8,13.5 1.5,8.5 9.5,8.5"
+                   fill="rgba(245,200,66,0.9)" stroke="#f5c842" stroke-width="0.5"/>
+        </svg>
+      </div>
+      <div class="dot" id="dot"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="cell">
+      <div class="lbl">Star Azimuth</div>
+      <div class="val gold" id="v-saz">---</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Star Altitude</div>
+      <div class="val gold" id="v-salt">---</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Phone Heading</div>
+      <div class="val" id="v-paz">---</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Phone Tilt</div>
+      <div class="val" id="v-palt">---</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Turn</div>
+      <div class="val" id="v-daz">---</div>
+    </div>
+    <div class="cell">
+      <div class="lbl">Tilt</div>
+      <div class="val" id="v-dalt">---</div>
+    </div>
+    <div class="status-cell" id="status">Acquiring sensors...</div>
+  </div>
+</div>
+
+<button id="cam-btn">Camera Off</button>
+<div id="hz-warn">Star is below the horizon right now</div>
+
+<div id="perm-err">
+  <h2>Permissions Needed</h2>
+  <p>
+    This app needs your location and device motion sensors to find Brian's star.<br><br>
+    Open this page in <strong>Safari</strong> on iPhone, then tap Allow when prompted for Location and Motion access.<br><br>
+    If previously denied: Settings &rsaquo; Privacy &rsaquo; Location Services &rsaquo; Safari.
+  </p>
+  <button onclick="document.getElementById('perm-err').classList.remove('show')">Dismiss</button>
+</div>
+
+<script>
+// =====================================================
+//  TARGET STAR  -  Brian Ross Dykstra
+//  RA:  06h 03m 18.55s  = 6 + 3/60 + 18.55/3600 hours
+//  Dec: -29° 39' 39.6"  = -(29 + 39/60 + 39.6/3600) degrees
+// =====================================================
+const STAR = {
+  name: 'Brian Ross Dykstra',
+  ra:  6 + 3/60 + 18.55/3600,          // 6.05515... hours
+  dec: -(29 + 39/60 + 39.6/3600),      // -29.6610... degrees
+  constellation: 'Columba'
+};
+
+// =====================================================
+//  STATE
+// =====================================================
+let lat = null, lon = null;
+let phoneAz = null, phoneTilt = null;
+let camStream = null, camOn = false;
+let raf = null, locked = false;
+
+// =====================================================
+//  STARFIELD
+// =====================================================
+(function() {
+  const canvas = document.getElementById('sfc');
+  const ctx = canvas.getContext('2d');
+  let W, H, stars = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    const n = Math.floor(W * H / 2800);
+    stars = Array.from({ length: n }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.1 + 0.15,
+      phase: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.0025 + 0.0008,
+      warm: Math.random() > 0.7  // some stars slightly warm-tinted
+    }));
+  }
+
+  function draw(t) {
+    ctx.clearRect(0, 0, W, H);
+    for (const s of stars) {
+      const a = 0.25 + 0.55 * Math.abs(Math.sin(t * s.speed + s.phase));
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = s.warm
+        ? `rgba(255,240,200,${a})`
+        : `rgba(220,230,255,${a})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(draw);
+})();
+
+// =====================================================
+//  SCREENS
+// =====================================================
+function show(id) {
+  ['s-intro','s-track'].forEach(s => {
+    document.getElementById(s).classList.toggle('gone', s !== id);
+  });
+}
+
+// =====================================================
+//  BEGIN
+// =====================================================
+document.getElementById('btn-begin').addEventListener('click', begin);
+document.getElementById('btn-reset').addEventListener('click', () => {
+  stopTracking();
+  show('s-intro');
+});
+
+async function begin() {
+  // Location
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, {
+        enableHighAccuracy: true, timeout: 12000, maximumAge: 60000
+      })
+    );
+    lat = pos.coords.latitude;
+    lon = pos.coords.longitude;
+  } catch(e) {
+    document.getElementById('perm-err').classList.add('show');
+    return;
+  }
+
+  // iOS motion permission
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r !== 'granted') {
+        document.getElementById('perm-err').classList.add('show');
+        return;
+      }
+    } catch(e) {
+      document.getElementById('perm-err').classList.add('show');
+      return;
+    }
+  }
+
+  window.addEventListener('deviceorientationabsolute', onOrient, true);
+  window.addEventListener('deviceorientation', onOrient, true);
+
+  show('s-track');
+  document.getElementById('cam-btn').style.display = 'block';
+
+  if (raf) cancelAnimationFrame(raf);
+  loop();
+}
+
+function stopTracking() {
+  window.removeEventListener('deviceorientationabsolute', onOrient, true);
+  window.removeEventListener('deviceorientation', onOrient, true);
+  if (raf) cancelAnimationFrame(raf);
+  stopCam();
+  phoneAz = null; phoneTilt = null; locked = false;
+  document.getElementById('cam-btn').style.display = 'none';
+  setLocked(false);
+}
+
+// =====================================================
+//  ORIENTATION
+// =====================================================
+function onOrient(e) {
+  if (e.webkitCompassHeading != null) {
+    phoneAz = e.webkitCompassHeading;
+  } else if (e.alpha != null) {
+    phoneAz = (360 - e.alpha + 360) % 360;
+  }
+
+  if (e.beta != null) {
+    let b = e.beta;
+    if (b > 90)  b = 180 - b;
+    if (b < -90) b = -180 - b;
+    phoneTilt = -(b - 90);
+  }
+}
+
+// =====================================================
+//  ASTRONOMY
+// =====================================================
+const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
+
+function jd(date) { return date.valueOf() / 86400000 + 2440587.5; }
+
+function gmst_deg(j) {
+  const T = (j - 2451545) / 36525;
+  return ((280.46061837 + 360.98564736629 * (j - 2451545)
+          + T * T * 0.000387933 - T * T * T / 38710000) % 360 + 360) % 360;
+}
+
+function altAz(star, latDeg, lonDeg, date) {
+  const j    = jd(date);
+  const lst  = ((gmst_deg(j) + lonDeg) % 360 + 360) % 360;
+  const ha   = ((lst - star.ra * 15) % 360 + 360) % 360;
+  const latR = latDeg * D2R;
+  const decR = star.dec * D2R;
+  const haR  = ha      * D2R;
+
+  const sinA = Math.sin(decR) * Math.sin(latR) +
+               Math.cos(decR) * Math.cos(latR) * Math.cos(haR);
+  const alt  = Math.asin(Math.max(-1, Math.min(1, sinA))) * R2D;
+
+  const cosZ = (Math.sin(decR) - Math.sin(latR) * sinA) /
+               (Math.cos(latR) * Math.cos(alt * D2R));
+  let az = Math.acos(Math.max(-1, Math.min(1, cosZ))) * R2D;
+  if (Math.sin(haR) > 0) az = 360 - az;
+
+  return { alt, az };
+}
+
+// =====================================================
+//  MAIN LOOP
+// =====================================================
+function loop() {
+  if (lat === null) { raf = requestAnimationFrame(loop); return; }
+
+  const { alt, az } = altAz(STAR, lat, lon, new Date());
+
+  document.getElementById('v-saz').textContent  = az.toFixed(1)  + '\u00b0';
+  document.getElementById('v-salt').textContent = alt.toFixed(1) + '\u00b0';
+
+  document.getElementById('hz-warn').style.display = alt < -0.5 ? 'block' : 'none';
+
+  const status = document.getElementById('status');
+
+  if (phoneAz !== null && phoneTilt !== null) {
+    document.getElementById('v-paz').textContent  = phoneAz.toFixed(1)  + '\u00b0';
+    document.getElementById('v-palt').textContent = phoneTilt.toFixed(1) + '\u00b0';
+
+    const dAz  = ((az  - phoneAz  + 540) % 360) - 180;
+    const dAlt = alt - phoneTilt;
+
+    const azEl  = document.getElementById('v-daz');
+    const altEl = document.getElementById('v-dalt');
+
+    // Direction labels
+    azEl.textContent  = Math.abs(dAz)  < 1 ? 'On Target'
+                      : (dAz > 0 ? '\u25b6 ' : '\u25c0 ') + Math.abs(dAz).toFixed(1) + '\u00b0 ' + (dAz > 0 ? 'right' : 'left');
+    altEl.textContent = Math.abs(dAlt) < 1 ? 'On Target'
+                      : (dAlt > 0 ? '\u25b2 ' : '\u25bc ') + Math.abs(dAlt).toFixed(1) + '\u00b0 ' + (dAlt > 0 ? 'up' : 'down');
+
+    const close = Math.abs(dAz) < 5  && Math.abs(dAlt) < 5;
+    const lock  = Math.abs(dAz) < 1  && Math.abs(dAlt) < 1;
+
+    azEl.className  = altEl.className = 'val ' + (lock ? 'locked' : close ? 'gold' : 'amber');
+
+    updateArrows(dAz, dAlt);
+
+    if (lock && !locked) { locked = true;  setLocked(true);  }
+    if (!lock && locked) { locked = false; setLocked(false); }
+
+    if (lock) {
+      status.textContent = 'Locked on Brian\'s Star';
+      status.classList.add('locked-status');
+    } else {
+      const parts = [];
+      if (dAz  >  5) parts.push('Turn right');
+      if (dAz  < -5) parts.push('Turn left');
+      if (dAlt >  5) parts.push('Tilt up');
+      if (dAlt < -5) parts.push('Tilt down');
+      status.textContent = parts.length ? parts.join(' + ') : 'Almost there\u2026';
+      status.classList.remove('locked-status');
+    }
+  } else {
+    document.getElementById('v-paz').textContent  = 'waiting\u2026';
+    document.getElementById('v-palt').textContent = 'waiting\u2026';
+    document.getElementById('v-daz').textContent  = '---';
+    document.getElementById('v-dalt').textContent = '---';
+    status.textContent = 'Waiting for sensor data\u2026';
+    status.classList.remove('locked-status');
+  }
+
+  raf = requestAnimationFrame(loop);
+}
+
+// =====================================================
+//  ARROWS
+// =====================================================
+function updateArrows(dAz, dAlt) {
+  const DEAD = 1.5, STRONG = 8;
+  function set(id, show, strong) {
+    const el = document.getElementById(id);
+    el.style.opacity = show ? (strong ? '1' : '0.45') : '0';
+    el.style.color   = show && strong ? '#e8922a' : '#f5c842';
+  }
+  set('aR', dAz  >  DEAD, dAz  >  STRONG);
+  set('aL', dAz  < -DEAD, dAz  < -STRONG);
+  set('aU', dAlt >  DEAD, dAlt >  STRONG);
+  set('aD', dAlt < -DEAD, dAlt < -STRONG);
+}
+
+// =====================================================
+//  LOCK STATE
+// =====================================================
+function setLocked(on) {
+  const ids = {
+    rings:   ['r1','r2','r3'],
+    crosses: ['ch','cv'],
+    corners: ['ctl','ctr','cbl','cbr']
+  };
+  ids.rings.forEach(id   => document.getElementById(id).classList.toggle('locked', on));
+  ids.crosses.forEach(id => document.getElementById(id).classList.toggle('locked', on));
+  ids.corners.forEach(id => document.getElementById(id).classList.toggle('locked', on));
+  document.getElementById('dot').classList.toggle('locked', on);
+  document.getElementById('slocked').classList.toggle('show', on);
+
+  if (on) {
+    const f = document.getElementById('lflash');
+    f.classList.remove('fire');
+    void f.offsetWidth;
+    f.classList.add('fire');
+  }
+}
+
+// =====================================================
+//  CAMERA
+// =====================================================
+document.getElementById('cam-btn').addEventListener('click', toggleCam);
+
+async function toggleCam() {
+  if (camOn) { stopCam(); return; }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' } }, audio: false
+    });
+    const v = document.getElementById('cam');
+    v.srcObject = camStream;
+    v.classList.add('on');
+    camOn = true;
+    document.getElementById('cam-btn').textContent = 'Camera On';
+  } catch(e) {
+    alert('Camera unavailable: ' + e.message);
+  }
+}
+
+function stopCam() {
+  const v = document.getElementById('cam');
+  v.classList.remove('on');
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  v.srcObject = null;
+  camOn = false;
+  document.getElementById('cam-btn').textContent = 'Camera Off';
+}
+</script>
+</body>
+</html>
