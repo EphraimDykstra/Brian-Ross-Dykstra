@@ -903,12 +903,10 @@ let lastOrientMs = 0; // deduplication: both deviceorientation & deviceorientati
 let lastOrientTimestamp = 0; // staleness detection
 
 function onOrient(e) {
-  // Deduplicate — iOS fires both event types per sensor update; only process once per ~14ms
-  const now = Date.now();
-  if (now - lastOrientMs < 14) return;
-  lastOrientMs = now;
-  lastOrientTimestamp = now;
-
+  // Extract data FIRST — a null-data event must not consume the dedup window.
+  // Bug was: deviceorientationabsolute fires with null compass values, updates
+  // lastOrientMs, then blocks the subsequent deviceorientation event that has
+  // the real webkitCompassHeading → phoneAz freezes after the first reload.
   let newAz = null, newTilt = null;
 
   if (e.webkitCompassHeading != null) {
@@ -924,8 +922,17 @@ function onOrient(e) {
     newTilt = -(b - 90);
   }
 
-  if (newAz   !== null) phoneAz   = phoneAz   === null ? newAz   : lerpAngle(phoneAz, newAz, 0.3);
-  if (newTilt !== null) phoneTilt = phoneTilt === null ? newTilt : phoneTilt + 0.3 * (newTilt - phoneTilt);
+  // No usable data — bail without touching the dedup timestamp
+  if (newAz === null && newTilt === null) return;
+
+  // Deduplicate only real data events
+  const now = Date.now();
+  if (now - lastOrientMs < 14) return;
+  lastOrientMs = now;
+  lastOrientTimestamp = now;
+
+  if (newAz   !== null) phoneAz   = phoneAz   === null ? newAz   : lerpAngle(phoneAz, newAz, 0.35);
+  if (newTilt !== null) phoneTilt = phoneTilt === null ? newTilt : phoneTilt + 0.35 * (newTilt - phoneTilt);
 }
 
 function reattachOrientListeners() {
@@ -1082,7 +1089,19 @@ function drawTrajectory() {
 // =====================================================
 //  MAIN LOOP
 // =====================================================
+let lastLoopTime = 0;
+
+// Safety net: if requestAnimationFrame silently stalls (Safari backgrounding,
+// iOS power management), this interval kicks the loop back into life.
+setInterval(() => {
+  if (lat !== null && Date.now() - lastLoopTime > 1000) {
+    if (raf) cancelAnimationFrame(raf);
+    loop();
+  }
+}, 800);
+
 function loop() {
+  lastLoopTime = Date.now();
   if (lat === null) { raf = requestAnimationFrame(loop); return; }
 
   buildTrajectory();
