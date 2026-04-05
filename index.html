@@ -744,6 +744,30 @@ let phoneAz = null, phoneTilt = null;
 let camStream = null, camOn = false;
 let raf = null, locked = false;
 let noSensors = false, sensorTimer = null;
+let wakeLockObj = null;
+
+// ---- Wake Lock: keep screen on so iOS doesn't throttle sensors ----
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try { wakeLockObj = await navigator.wakeLock.request('screen'); } catch(e) {}
+  }
+}
+
+// Re-acquire wake lock whenever page becomes visible
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    requestWakeLock();
+    reattachOrientListeners();
+    if (lat !== null) { if (raf) cancelAnimationFrame(raf); loop(); }
+  }
+});
+
+// Watchdog: if orientation hasn't updated in 3s while tracking, reattach automatically
+setInterval(() => {
+  if (lat !== null && !noSensors && phoneAz !== null) {
+    if (Date.now() - lastOrientTimestamp > 3000) reattachOrientListeners();
+  }
+}, 2500);
 
 // =====================================================
 //  STARFIELD
@@ -837,6 +861,7 @@ async function begin() {
   }
 
   reattachOrientListeners();
+  requestWakeLock();
 
   // If no sensor data arrives within 4 seconds, assume desktop / no sensors
   noSensors = false;
@@ -915,14 +940,6 @@ window.addEventListener('orientationchange', () => {
   if (lat !== null) setTimeout(reattachOrientListeners, 400);
 });
 
-// Restart RAF loop if tab was backgrounded then foregrounded
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && lat !== null) {
-    reattachOrientListeners();
-    if (raf) cancelAnimationFrame(raf);
-    loop();
-  }
-});
 
 // =====================================================
 //  ASTRONOMY
@@ -1102,33 +1119,30 @@ function loop() {
 
     azEl.className  = altEl.className = 'val ' + (lock ? 'locked' : close ? 'gold' : 'amber');
 
+    // Always update direction — even when below the horizon
+    updateArrows(dAz, dAlt);
+    updateAimArrow(dAz, dAlt);
+
     if (lock && !locked) { locked = true;  setLocked(true);  }
     if (!lock && locked) { locked = false; setLocked(false); }
-
-    if (belowHorizon) {
-      updateArrows(0, 0);
-      hideAimArrow();
-      const rise = nextRise(STAR, lat, lon);
-      if (rise) {
-        const rAz  = altAz(STAR, lat, lon, rise).az;
-        const mins = Math.round((rise - Date.now()) / 60000);
-        const hrs  = Math.floor(mins / 60), rem = mins % 60;
-        const inStr = hrs > 0 ? hrs + 'h ' + rem + 'm' : rem + 'm';
-        const timeStr = rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        status.textContent = 'Below horizon \u2014 rises ' + timeStr + ' (' + inStr + ') toward ' + azToCompass(rAz);
-      } else {
-        status.textContent = 'Star does not rise from your location tonight';
-      }
-      status.classList.remove('locked-status');
-    } else {
-      updateArrows(dAz, dAlt);
-      updateAimArrow(dAz, dAlt);
-    }
 
     if (lock) {
       status.textContent = 'Locked on Brian\'s Star';
       status.classList.add('locked-status');
-    } else if (!belowHorizon) {
+    } else if (belowHorizon) {
+      // Below horizon: still point the arrow, just note when it rises
+      const rise = nextRise(STAR, lat, lon);
+      if (rise) {
+        const mins    = Math.round((rise - Date.now()) / 60000);
+        const hrs     = Math.floor(mins / 60), rem = mins % 60;
+        const inStr   = hrs > 0 ? hrs + 'h ' + rem + 'm' : rem + 'm';
+        const timeStr = rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        status.textContent = 'Below horizon \u2014 follow arrow \u2014 rises ' + timeStr + ' (' + inStr + ')';
+      } else {
+        status.textContent = 'Below horizon \u2014 follow the arrow';
+      }
+      status.classList.remove('locked-status');
+    } else {
       const parts = [];
       if (dAz  >  5) parts.push('Turn right');
       if (dAz  < -5) parts.push('Turn left');
@@ -1144,21 +1158,19 @@ function loop() {
     document.getElementById('v-daz').textContent  = '\u2014';
     document.getElementById('v-dalt').textContent = '\u2014';
     if (noSensors) {
-      // Desktop or device with no orientation sensors — show rise info when below horizon
       if (belowHorizon) {
         const rise = nextRise(STAR, lat, lon);
         if (rise) {
-          const rAz  = altAz(STAR, lat, lon, rise).az;
-          const mins = Math.round((rise - Date.now()) / 60000);
-          const hrs  = Math.floor(mins / 60), rem = mins % 60;
-          const inStr = hrs > 0 ? hrs + 'h ' + rem + 'm' : rem + 'm';
+          const mins    = Math.round((rise - Date.now()) / 60000);
+          const hrs     = Math.floor(mins / 60), rem = mins % 60;
+          const inStr   = hrs > 0 ? hrs + 'h ' + rem + 'm' : rem + 'm';
           const timeStr = rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          status.textContent = 'Below horizon \u2014 rises ' + timeStr + ' (' + inStr + ') toward ' + azToCompass(rAz);
+          status.textContent = 'Below horizon \u2014 rises ' + timeStr + ' (' + inStr + ')';
         } else {
-          status.textContent = 'Star does not rise from your location tonight';
+          status.textContent = 'Below horizon \u2014 star does not rise tonight';
         }
       } else {
-        status.textContent = 'Position shown above \u2014 motion sensors unavailable on this device';
+        status.textContent = 'Position shown \u2014 motion sensors unavailable';
       }
     } else {
       status.textContent = 'Waiting for sensor data\u2026';
