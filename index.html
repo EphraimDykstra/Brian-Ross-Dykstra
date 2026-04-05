@@ -1236,28 +1236,28 @@ function updateAimArrow(dAz, dAlt) {
   // ---- In-frame border ----
   reticle.classList.toggle('in-frame', dist < IN_FRAME_DEG && dist > LOCK_DEG);
 
-  // ---- Seek arrow (outside reticle, orbits rim pointing at star) ----
+  // ---- Seek arrow (outside reticle, orbits rim pointing INWARD toward center) ----
   if (dist > IN_FRAME_DEG) {
-    const angleRad = Math.atan2(dAz, dAlt);         // angle from "up", clockwise = right
-    const angleDeg = angleRad * (180 / Math.PI);
+    const angleRad = Math.atan2(dAz, dAlt);         // direction from center toward star
     const arrowR   = R + 36;                         // px from screen center to arrow center
     const tx = Math.sin(angleRad) * arrowR;
-    const ty = -Math.cos(angleRad) * arrowR;         // negative: up = negative CSS y
+    const ty = -Math.cos(angleRad) * arrowR;
+    // Arrow tip points INWARD (toward center = "bring me here") — rotate 180° from star direction
+    const angleDeg = (angleRad * (180 / Math.PI) + 180) % 360;
     arrow.style.display = 'flex';
-    // translate to edge of reticle, then rotate so tip points outward toward star
     arrow.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) rotate(${angleDeg}deg)`;
     degLabel.textContent  = Math.round(dist) + '\u00b0';
     indicator.style.display = 'none';
     guideLine.style.display = 'none';
   } else if (dist > LOCK_DEG) {
-    // ---- In-frame: arrow sits at the star's position, points toward center ----
+    // ---- In-frame: arrow at star position, tip points toward center ----
     const rawX = (dAz  / MAX_DEG) * R;
     const rawY = (-dAlt / MAX_DEG) * R;
     const clampScale = Math.min(1, R / (Math.sqrt(rawX*rawX + rawY*rawY) || 1));
     const x = rawX * clampScale, y = rawY * clampScale;
 
-    // Point arrow in direction to move phone to center the star
-    const angleDeg = Math.atan2(dAz, dAlt) * (180 / Math.PI);
+    // Tip points toward center (from star position inward)
+    const angleDeg = Math.atan2(-dAz, -dAlt) * (180 / Math.PI);
 
     arrow.style.display   = 'flex';
     arrow.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${angleDeg}deg)`;
