@@ -916,10 +916,11 @@ function onOrient(e) {
   }
 
   if (e.beta != null) {
-    let b = e.beta;
-    if (b > 90)  b = 180 - b;
-    if (b < -90) b = -180 - b;
-    newTilt = -(b - 90);
+    // beta=90 → camera at horizon (0°), beta=180 → zenith (+90°), beta=0 → nadir (-90°)
+    // Camera altitude is simply beta − 90; clamp to valid [-90, 90] range.
+    newTilt = e.beta - 90;
+    if (newTilt > 90)  newTilt = 90;
+    if (newTilt < -90) newTilt = -90;
   }
 
   // No usable data — bail without touching the dedup timestamp
