@@ -1017,11 +1017,14 @@ function drawTrajectory() {
   if (phoneAz === null || phoneTilt === null || !trajPoints.length) return;
 
   const W = canvas.width, H = canvas.height;
-  const cx = W / 2, cy = H / 2;
 
-  // Use same scale as target dot: reticle radius / MAX_DEG
+  // Use the reticle's actual center, not the viewport center
   const reticle = document.getElementById('reticle');
-  const R = reticle.offsetWidth / 2;
+  const rRect = reticle.getBoundingClientRect();
+  const cx = rRect.left + rRect.width  / 2;
+  const cy = rRect.top  + rRect.height / 2;
+
+  const R = rRect.width / 2;
   const MAX_DEG = 60;
   const scale = R / MAX_DEG;  // pixels per degree — consistent with target dot
 
@@ -1237,15 +1240,22 @@ function updateAimArrow(dAz, dAlt) {
   // ---- In-frame border ----
   reticle.classList.toggle('in-frame', dist < IN_FRAME_DEG && dist > LOCK_DEG);
 
+  // Reticle center in viewport coordinates (anchor for the arrow)
+  const rRect2 = reticle.getBoundingClientRect();
+  const rcx = rRect2.left + rRect2.width  / 2;
+  const rcy = rRect2.top  + rRect2.height / 2;
+
   // ---- Seek arrow (outside reticle, orbits rim pointing INWARD toward center) ----
   if (dist > IN_FRAME_DEG) {
     const angleRad = Math.atan2(dAz, dAlt);         // direction from center toward star
-    const arrowR   = R + 36;                         // px from screen center to arrow center
+    const arrowR   = R + 36;                         // px from reticle center to arrow center
     const tx = Math.sin(angleRad) * arrowR;
     const ty = -Math.cos(angleRad) * arrowR;
     // Arrow tip points INWARD (toward center = "bring me here") — rotate 180° from star direction
     const angleDeg = (angleRad * (180 / Math.PI) + 180) % 360;
-    arrow.style.display = 'flex';
+    arrow.style.left      = rcx + 'px';
+    arrow.style.top       = rcy + 'px';
+    arrow.style.display   = 'flex';
     arrow.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) rotate(${angleDeg}deg)`;
     degLabel.textContent  = Math.round(dist) + '\u00b0';
     indicator.style.display = 'none';
@@ -1260,6 +1270,8 @@ function updateAimArrow(dAz, dAlt) {
     // Tip points toward center (from star position inward)
     const angleDeg = Math.atan2(-dAz, -dAlt) * (180 / Math.PI);
 
+    arrow.style.left      = rcx + 'px';
+    arrow.style.top       = rcy + 'px';
     arrow.style.display   = 'flex';
     arrow.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${angleDeg}deg)`;
     degLabel.textContent  = dist.toFixed(1) + '\u00b0';
