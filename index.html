@@ -311,6 +311,29 @@ html, body {
   box-shadow: 0 0 22px var(--gold), 0 0 48px rgba(245,200,66,0.3);
 }
 
+/* Floating target dot — moves to show where the star is relative to phone aim */
+.target-indicator {
+  position: absolute;
+  width: 18px; height: 18px;
+  z-index: 6;
+  pointer-events: none;
+  display: none; /* shown once sensors are ready */
+}
+.target-indicator svg {
+  filter: drop-shadow(0 0 6px rgba(245,200,66,0.9));
+}
+/* Guide line from center to target */
+#guide-line {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, rgba(245,200,66,0.35));
+  transform-origin: top center;
+  z-index: 5;
+  pointer-events: none;
+  display: none;
+}
+
 /* Lock flash */
 @keyframes lflash {
   0%   { opacity: 0; transform: scale(0.85); }
@@ -546,6 +569,13 @@ html, body {
         <div class="arr arr-U" id="aU">&#9650;</div>
         <div class="arr arr-D" id="aD">&#9660;</div>
       </div>
+      <div id="guide-line"></div>
+      <div class="target-indicator" id="target-indicator">
+        <svg viewBox="0 0 18 18" fill="none">
+          <polygon points="9,1 10.8,6.5 16.5,6.5 11.9,9.8 13.7,15.3 9,12 4.3,15.3 6.1,9.8 1.5,6.5 7.2,6.5"
+                   fill="rgba(245,200,66,0.85)" stroke="#f5c842" stroke-width="0.8"/>
+        </svg>
+      </div>
       <div class="lock-flash" id="lflash"></div>
       <div class="star-locked" id="slocked">
         <svg viewBox="0 0 24 24" fill="none">
@@ -735,6 +765,7 @@ function stopTracking() {
   if (sensorTimer) { clearTimeout(sensorTimer); sensorTimer = null; }
   stopCam();
   phoneAz = null; phoneTilt = null; locked = false; noSensors = false;
+  hideTargetDot();
   document.getElementById('cam-btn').style.display = 'none';
   setLocked(false);
 }
@@ -830,6 +861,7 @@ function loop() {
     azEl.className  = altEl.className = 'val ' + (lock ? 'locked' : close ? 'gold' : 'amber');
 
     updateArrows(dAz, dAlt);
+    updateTargetDot(dAz, dAlt);
 
     if (lock && !locked) { locked = true;  setLocked(true);  }
     if (!lock && locked) { locked = false; setLocked(false); }
@@ -861,6 +893,7 @@ function loop() {
       status.classList.remove('locked-status');
     }
   } else {
+    hideTargetDot();
     document.getElementById('v-paz').textContent  = '\u2014';
     document.getElementById('v-palt').textContent = '\u2014';
     document.getElementById('v-daz').textContent  = '\u2014';
@@ -905,6 +938,51 @@ function updateArrows(dAz, dAlt) {
   set('aL', dAz  < -DEAD, dAz  < -STRONG);
   set('aU', dAlt >  DEAD, dAlt >  STRONG);
   set('aD', dAlt < -DEAD, dAlt < -STRONG);
+}
+
+// =====================================================
+//  TARGET DOT
+// =====================================================
+function updateTargetDot(dAz, dAlt) {
+  const indicator = document.getElementById('target-indicator');
+  const guideLine = document.getElementById('guide-line');
+  const reticle   = document.getElementById('reticle');
+  const R = reticle.offsetWidth / 2;  // reticle radius in px
+
+  // Map degrees to pixels — 60° of error = full radius away from center
+  const MAX_DEG = 60;
+  const rawX = (dAz  / MAX_DEG) * R;
+  const rawY = (-dAlt / MAX_DEG) * R;  // negative: up on screen = negative y
+
+  // Clamp to a circle so the dot never leaves the reticle area
+  const dist  = Math.sqrt(rawX * rawX + rawY * rawY);
+  const scale = dist > R ? R / dist : 1;
+  const x = rawX * scale;
+  const y = rawY * scale;
+
+  indicator.style.display = 'block';
+  // Center the 18px indicator on (x, y) relative to reticle center
+  indicator.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+  // Fade dot out as it nears center (locked)
+  const proximity = Math.min(dist / R, 1);
+  indicator.style.opacity = proximity < 0.08 ? '0' : String(0.4 + 0.6 * proximity);
+
+  // Guide line: from center toward the dot
+  if (dist > 12) {
+    const angle = Math.atan2(y, x) * (180 / Math.PI) + 90; // CSS rotation
+    const lineLen = Math.max(0, dist - 12);
+    guideLine.style.display = 'block';
+    guideLine.style.height  = lineLen + 'px';
+    guideLine.style.transform = `rotate(${angle}deg)`;
+  } else {
+    guideLine.style.display = 'none';
+  }
+}
+
+function hideTargetDot() {
+  document.getElementById('target-indicator').style.display = 'none';
+  document.getElementById('guide-line').style.display = 'none';
 }
 
 // =====================================================
