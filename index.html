@@ -497,6 +497,7 @@ html, body {
 <video id="cam" autoplay playsinline muted></video>
 <div class="vig"></div>
 <div class="grain"></div>
+<canvas id="traj-canvas" style="position:fixed;inset:0;z-index:4;pointer-events:none;"></canvas>
 
 <!-- ===================================================
      INTRO SCREEN
@@ -765,28 +766,51 @@ function stopTracking() {
   if (sensorTimer) { clearTimeout(sensorTimer); sensorTimer = null; }
   stopCam();
   phoneAz = null; phoneTilt = null; locked = false; noSensors = false;
+  trajPoints = []; trajCacheTime = -Infinity;
+  const tc = document.getElementById('traj-canvas');
+  tc.getContext('2d').clearRect(0, 0, tc.width, tc.height);
   hideTargetDot();
   document.getElementById('cam-btn').style.display = 'none';
   setLocked(false);
 }
 
 // =====================================================
-//  ORIENTATION
+//  ORIENTATION  (smoothed with low-pass filter)
 // =====================================================
+function lerpAngle(cur, tgt, a) {
+  // Handles 0/360 wraparound correctly
+  const diff = ((tgt - cur + 540) % 360) - 180;
+  return (cur + a * diff + 360) % 360;
+}
+
 function onOrient(e) {
+  let newAz = null, newTilt = null;
+
   if (e.webkitCompassHeading != null) {
-    phoneAz = e.webkitCompassHeading;
+    newAz = e.webkitCompassHeading;
   } else if (e.alpha != null) {
-    phoneAz = (360 - e.alpha + 360) % 360;
+    newAz = (360 - e.alpha + 360) % 360;
   }
 
   if (e.beta != null) {
     let b = e.beta;
     if (b > 90)  b = 180 - b;
     if (b < -90) b = -180 - b;
-    phoneTilt = -(b - 90);
+    newTilt = -(b - 90);
   }
+
+  // Smooth: alpha 0.35 = responsive but not jittery
+  if (newAz   !== null) phoneAz   = phoneAz   === null ? newAz   : lerpAngle(phoneAz, newAz, 0.35);
+  if (newTilt !== null) phoneTilt = phoneTilt === null ? newTilt : phoneTilt + 0.35 * (newTilt - phoneTilt);
 }
+
+// Restart tracking loop if the browser tab was backgrounded and resumed
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && lat !== null && phoneAz !== null) {
+    if (raf) cancelAnimationFrame(raf);
+    loop();
+  }
+});
 
 // =====================================================
 //  ASTRONOMY
@@ -824,10 +848,116 @@ function altAz(star, latDeg, lonDeg, date) {
 
 // =====================================================
 //  RISE TIME
-// ==============================================//  MAIN LOOP
+// =====================================================
+
+// =====================================================
+//  TRAJECTORY
+// =====================================================
+let trajPoints = [];      // cached array of {az, alt, t, minutesFromNow}
+let trajCacheTime = -Infinity;
+
+function buildTrajectory() {
+  if (!lat) return;
+  const now = Date.now();
+  if (now - trajCacheTime < 60000) return; // rebuild once per minute
+  trajCacheTime = now;
+  trajPoints = [];
+  // Past 4 hours → next 10 hours in 15-minute steps
+  for (let m = -240; m <= 600; m += 15) {
+    const date = new Date(now + m * 60000);
+    const { alt, az } = altAz(STAR, lat, lon, date);
+    trajPoints.push({ az, alt, m }); // m = minutes from now (negative = past)
+  }
+}
+
+function drawTrajectory() {
+  const canvas = document.getElementById('traj-canvas');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (phoneAz === null || phoneTilt === null || !trajPoints.length) return;
+
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+
+  // Use same scale as target dot: reticle radius / MAX_DEG
+  const reticle = document.getElementById('reticle');
+  const R = reticle.offsetWidth / 2;
+  const MAX_DEG = 60;
+  const scale = R / MAX_DEG;  // pixels per degree — consistent with target dot
+
+  function project(pt) {
+    const dAz  = ((pt.az - phoneAz + 540) % 360) - 180;
+    const dAlt = pt.alt - phoneTilt;
+    return { x: cx + dAz * scale, y: cy - dAlt * scale, dAz, dAlt };
+  }
+
+  // --- Draw arc line ---
+  // Split into segments: above-horizon solid, below-horizon dashed
+  const segments = [];
+  let seg = null;
+  for (const pt of trajPoints) {
+    const p = project(pt);
+    // Only include if within ~90° of phone direction (could be off-screen but draw anyway, clip handles it)
+    if (Math.abs(p.dAz) > 90 || Math.abs(p.dAlt) > 90) {
+      if (seg) { segments.push(seg); seg = null; }
+      continue;
+    }
+    if (!seg) seg = { above: pt.alt >= 0, points: [] };
+    if (seg.above !== (pt.alt >= 0)) { segments.push(seg); seg = { above: pt.alt >= 0, points: [] }; }
+    seg.points.push({ ...p, m: pt.m });
+  }
+  if (seg) segments.push(seg);
+
+  for (const s of segments) {
+    if (s.points.length < 2) continue;
+    ctx.beginPath();
+    ctx.moveTo(s.points[0].x, s.points[0].y);
+    for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash(s.above ? [] : [5, 10]);
+    // Past = amber, future = gold
+    const hasPast   = s.points.some(p => p.m < 0);
+    const hasFuture = s.points.some(p => p.m > 0);
+    ctx.strokeStyle = hasPast && !hasFuture
+      ? 'rgba(232,146,42,0.3)'
+      : 'rgba(245,200,66,0.45)';
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // --- Draw hourly tick marks + labels ---
+  for (let m = -240; m <= 600; m += 60) {
+    const date  = new Date(Date.now() + m * 60000);
+    const { alt, az } = altAz(STAR, lat, lon, date);
+    const p = project({ az, alt });
+    if (Math.abs(p.dAz) > 85 || Math.abs(p.dAlt) > 85) continue;
+    if (alt < 0) continue; // skip below-horizon hour labels
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = m < 0 ? 'rgba(232,146,42,0.6)' : 'rgba(245,200,66,0.85)';
+    ctx.fill();
+
+    const label = m === 0 ? 'now'
+                : m > 0   ? '+' + (m / 60) + 'h'
+                :            (m / 60) + 'h';
+    ctx.font = '600 10px "Josefin Sans", sans-serif';
+    ctx.fillStyle = m < 0 ? 'rgba(232,146,42,0.55)' : 'rgba(245,200,66,0.75)';
+    ctx.fillText(label, p.x + 6, p.y - 4);
+  }
+}
+
+// =====================================================
+//  MAIN LOOP
 // =====================================================
 function loop() {
   if (lat === null) { raf = requestAnimationFrame(loop); return; }
+
+  buildTrajectory();
+  drawTrajectory();
 
   const { alt, az } = altAz(STAR, lat, lon, new Date());
 
