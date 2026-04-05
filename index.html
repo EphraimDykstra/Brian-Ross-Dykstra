@@ -793,34 +793,7 @@ function altAz(star, latDeg, lonDeg, date) {
 
 // =====================================================
 //  RISE TIME
-// =====================================================
-function nextRise(star, latDeg, lonDeg) {
-  const STEP = 5 * 60 * 1000; // 5-minute steps
-  let t = Date.now();
-  for (let i = 0; i < 300; i++) { // search up to 25 hours ahead
-    t += STEP;
-    if (altAz(star, latDeg, lonDeg, new Date(t)).alt > 0) {
-      // Binary search for the exact crossing
-      let lo = t - STEP, hi = t;
-      for (let j = 0; j < 22; j++) {
-        const mid = (lo + hi) / 2;
-        if (altAz(star, latDeg, lonDeg, new Date(mid)).alt > 0) hi = mid;
-        else lo = mid;
-      }
-      return new Date((lo + hi) / 2);
-    }
-  }
-  return null; // never rises from this latitude
-}
-
-function azToCompass(deg) {
-  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE',
-                 'S','SSW','SW','WSW','W','WNW','NW','NNW'];
-  return dirs[Math.round(deg / 22.5) % 16];
-}
-
-// =====================================================
-//  MAIN LOOP
+// ==============================================//  MAIN LOOP
 // =====================================================
 function loop() {
   if (lat === null) { raf = requestAnimationFrame(loop); return; }
