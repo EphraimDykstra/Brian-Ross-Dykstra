@@ -311,13 +311,14 @@ html, body {
   box-shadow: 0 0 22px var(--gold), 0 0 48px rgba(245,200,66,0.3);
 }
 
-/* Floating target dot — moves to show where the star is relative to phone aim */
+/* Floating target star — correctly anchored to reticle center */
 .target-indicator {
   position: absolute;
+  top: 50%; left: 50%;
   width: 18px; height: 18px;
   z-index: 6;
   pointer-events: none;
-  display: none; /* shown once sensors are ready */
+  display: none;
 }
 .target-indicator svg {
   filter: drop-shadow(0 0 6px rgba(245,200,66,0.9));
@@ -332,6 +333,46 @@ html, body {
   z-index: 5;
   pointer-events: none;
   display: none;
+}
+
+/* Seek arrow — orbits the reticle rim, always points at the star */
+#aim-arrow {
+  position: fixed;
+  top: 50%; left: 50%;
+  z-index: 30;
+  pointer-events: none;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  transform-origin: center center;
+}
+#aim-arrow svg { filter: drop-shadow(0 0 8px rgba(245,200,66,0.9)); }
+#aim-deg {
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(245,200,66,0.7);
+  white-space: nowrap;
+}
+
+/* Bold square frame border when star is in the field of view */
+.reticle.in-frame::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  box-shadow: 0 0 20px rgba(245,200,66,0.45), inset 0 0 12px rgba(245,200,66,0.08);
+  pointer-events: none;
+  z-index: 10;
+  animation: frame-pulse 1.8s ease-in-out infinite;
+}
+@keyframes frame-pulse {
+  0%,100% { opacity: 0.7; }
+  50%      { opacity: 1; }
 }
 
 /* Lock flash */
@@ -620,6 +661,15 @@ html, body {
 <button id="cam-btn">Camera Off</button>
 <div id="hz-warn">Star is below the horizon right now</div>
 
+<!-- Seek arrow: orbits reticle rim, rotates to point at the star -->
+<div id="aim-arrow">
+  <svg width="28" height="44" viewBox="0 0 28 44" fill="none">
+    <!-- Arrowhead -->
+    <polygon points="14,0 28,22 20,22 20,44 8,44 8,22 0,22" fill="#f5c842" opacity="0.95"/>
+  </svg>
+  <span id="aim-deg"></span>
+</div>
+
 <div id="perm-err">
   <h2>Permissions Needed</h2>
   <p>
@@ -743,8 +793,7 @@ async function begin() {
     return;
   }
 
-  window.addEventListener('deviceorientationabsolute', onOrient, true);
-  window.addEventListener('deviceorientation', onOrient, true);
+  reattachOrientListeners();
 
   // If no sensor data arrives within 4 seconds, assume desktop / no sensors
   noSensors = false;
@@ -769,27 +818,35 @@ function stopTracking() {
   trajPoints = []; trajCacheTime = -Infinity;
   const tc = document.getElementById('traj-canvas');
   tc.getContext('2d').clearRect(0, 0, tc.width, tc.height);
-  hideTargetDot();
+  hideAimArrow();
   document.getElementById('cam-btn').style.display = 'none';
   setLocked(false);
 }
 
 // =====================================================
-//  ORIENTATION  (smoothed with low-pass filter)
+//  ORIENTATION  (smoothed + deduplicated + auto-reconnect)
 // =====================================================
 function lerpAngle(cur, tgt, a) {
-  // Handles 0/360 wraparound correctly
   const diff = ((tgt - cur + 540) % 360) - 180;
   return (cur + a * diff + 360) % 360;
 }
 
+let lastOrientMs = 0; // deduplication: both deviceorientation & deviceorientationabsolute fire per update
+let lastOrientTimestamp = 0; // staleness detection
+
 function onOrient(e) {
+  // Deduplicate — iOS fires both event types per sensor update; only process once per ~14ms
+  const now = Date.now();
+  if (now - lastOrientMs < 14) return;
+  lastOrientMs = now;
+  lastOrientTimestamp = now;
+
   let newAz = null, newTilt = null;
 
   if (e.webkitCompassHeading != null) {
-    newAz = e.webkitCompassHeading;
+    newAz = e.webkitCompassHeading;          // iOS: true compass heading
   } else if (e.alpha != null) {
-    newAz = (360 - e.alpha + 360) % 360;
+    newAz = (360 - e.alpha + 360) % 360;    // Android / absolute fallback
   }
 
   if (e.beta != null) {
@@ -799,14 +856,26 @@ function onOrient(e) {
     newTilt = -(b - 90);
   }
 
-  // Smooth: alpha 0.35 = responsive but not jittery
-  if (newAz   !== null) phoneAz   = phoneAz   === null ? newAz   : lerpAngle(phoneAz, newAz, 0.35);
-  if (newTilt !== null) phoneTilt = phoneTilt === null ? newTilt : phoneTilt + 0.35 * (newTilt - phoneTilt);
+  if (newAz   !== null) phoneAz   = phoneAz   === null ? newAz   : lerpAngle(phoneAz, newAz, 0.3);
+  if (newTilt !== null) phoneTilt = phoneTilt === null ? newTilt : phoneTilt + 0.3 * (newTilt - phoneTilt);
 }
 
-// Restart tracking loop if the browser tab was backgrounded and resumed
+function reattachOrientListeners() {
+  window.removeEventListener('deviceorientationabsolute', onOrient, true);
+  window.removeEventListener('deviceorientation', onOrient, true);
+  window.addEventListener('deviceorientationabsolute', onOrient, true);
+  window.addEventListener('deviceorientation', onOrient, true);
+}
+
+// iOS stops orientation events when the phone rotates screen orientation — reattach
+window.addEventListener('orientationchange', () => {
+  if (lat !== null) setTimeout(reattachOrientListeners, 400);
+});
+
+// Restart RAF loop if tab was backgrounded then foregrounded
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && lat !== null && phoneAz !== null) {
+  if (!document.hidden && lat !== null) {
+    reattachOrientListeners();
     if (raf) cancelAnimationFrame(raf);
     loop();
   }
@@ -991,13 +1060,14 @@ function loop() {
     azEl.className  = altEl.className = 'val ' + (lock ? 'locked' : close ? 'gold' : 'amber');
 
     updateArrows(dAz, dAlt);
-    updateTargetDot(dAz, dAlt);
+    updateAimArrow(dAz, dAlt);
 
     if (lock && !locked) { locked = true;  setLocked(true);  }
     if (!lock && locked) { locked = false; setLocked(false); }
 
     if (belowHorizon) {
-      updateArrows(0, 0); // clear arrows — star is underground
+      updateArrows(0, 0);
+      hideAimArrow();
       const rise = nextRise(STAR, lat, lon);
       if (rise) {
         const rAz  = altAz(STAR, lat, lon, rise).az;
@@ -1023,7 +1093,7 @@ function loop() {
       status.classList.remove('locked-status');
     }
   } else {
-    hideTargetDot();
+    hideAimArrow();
     document.getElementById('v-paz').textContent  = '\u2014';
     document.getElementById('v-palt').textContent = '\u2014';
     document.getElementById('v-daz').textContent  = '\u2014';
@@ -1071,48 +1141,68 @@ function updateArrows(dAz, dAlt) {
 }
 
 // =====================================================
-//  TARGET DOT
+//  TARGET DOT + SEEK ARROW + FRAME BORDER
 // =====================================================
-function updateTargetDot(dAz, dAlt) {
+const IN_FRAME_DEG = 12;  // degrees — show frame border, hide seek arrow
+const LOCK_DEG     = 1;   // degrees — locked
+
+function updateAimArrow(dAz, dAlt) {
   const indicator = document.getElementById('target-indicator');
   const guideLine = document.getElementById('guide-line');
+  const arrow     = document.getElementById('aim-arrow');
+  const degLabel  = document.getElementById('aim-deg');
   const reticle   = document.getElementById('reticle');
-  const R = reticle.offsetWidth / 2;  // reticle radius in px
-
-  // Map degrees to pixels — 60° of error = full radius away from center
+  const R = reticle.offsetWidth / 2;
   const MAX_DEG = 60;
-  const rawX = (dAz  / MAX_DEG) * R;
-  const rawY = (-dAlt / MAX_DEG) * R;  // negative: up on screen = negative y
 
-  // Clamp to a circle so the dot never leaves the reticle area
-  const dist  = Math.sqrt(rawX * rawX + rawY * rawY);
-  const scale = dist > R ? R / dist : 1;
-  const x = rawX * scale;
-  const y = rawY * scale;
+  const dist = Math.sqrt(dAz * dAz + dAlt * dAlt);
 
-  indicator.style.display = 'block';
-  // Center the 18px indicator on (x, y) relative to reticle center
-  indicator.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+  // ---- In-frame border ----
+  reticle.classList.toggle('in-frame', dist < IN_FRAME_DEG && dist > LOCK_DEG);
 
-  // Fade dot out as it nears center (locked)
-  const proximity = Math.min(dist / R, 1);
-  indicator.style.opacity = proximity < 0.08 ? '0' : String(0.4 + 0.6 * proximity);
-
-  // Guide line: from center toward the dot
-  if (dist > 12) {
-    const angle = Math.atan2(y, x) * (180 / Math.PI) + 90; // CSS rotation
-    const lineLen = Math.max(0, dist - 12);
-    guideLine.style.display = 'block';
-    guideLine.style.height  = lineLen + 'px';
-    guideLine.style.transform = `rotate(${angle}deg)`;
-  } else {
+  // ---- Seek arrow (outside reticle, orbits rim pointing at star) ----
+  if (dist > IN_FRAME_DEG) {
+    const angleRad = Math.atan2(dAz, dAlt);         // angle from "up", clockwise = right
+    const angleDeg = angleRad * (180 / Math.PI);
+    const arrowR   = R + 36;                         // px from screen center to arrow center
+    const tx = Math.sin(angleRad) * arrowR;
+    const ty = -Math.cos(angleRad) * arrowR;         // negative: up = negative CSS y
+    arrow.style.display = 'flex';
+    // translate to edge of reticle, then rotate so tip points outward toward star
+    arrow.style.transform = `translate(calc(-50% + ${tx}px), calc(-50% + ${ty}px)) rotate(${angleDeg}deg)`;
+    degLabel.textContent  = Math.round(dist) + '\u00b0';
+    indicator.style.display = 'none';
     guideLine.style.display = 'none';
+  } else {
+    arrow.style.display = 'none';
+
+    // ---- Floating target dot (inside reticle, slides toward center) ----
+    const rawX = (dAz  / MAX_DEG) * R;
+    const rawY = (-dAlt / MAX_DEG) * R;
+    const clampScale = Math.min(1, R / (Math.sqrt(rawX*rawX + rawY*rawY) || 1));
+    const x = rawX * clampScale, y = rawY * clampScale;
+
+    indicator.style.display = 'block';
+    indicator.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+    indicator.style.opacity   = dist < LOCK_DEG ? '0' : String(0.35 + 0.65 * (dist / IN_FRAME_DEG));
+
+    if (dist > 2) {
+      const lineAngle = Math.atan2(y, x) * (180 / Math.PI) + 90;
+      const lineLen   = Math.max(0, Math.sqrt(x*x + y*y) - 12);
+      guideLine.style.display   = 'block';
+      guideLine.style.height    = lineLen + 'px';
+      guideLine.style.transform = `rotate(${lineAngle}deg)`;
+    } else {
+      guideLine.style.display = 'none';
+    }
   }
 }
 
-function hideTargetDot() {
+function hideAimArrow() {
   document.getElementById('target-indicator').style.display = 'none';
-  document.getElementById('guide-line').style.display = 'none';
+  document.getElementById('guide-line').style.display       = 'none';
+  document.getElementById('aim-arrow').style.display        = 'none';
+  document.getElementById('reticle').classList.remove('in-frame');
 }
 
 // =====================================================
