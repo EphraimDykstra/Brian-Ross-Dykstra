@@ -1230,28 +1230,28 @@ function updateAimArrow(dAz, dAlt) {
     degLabel.textContent  = Math.round(dist) + '\u00b0';
     indicator.style.display = 'none';
     guideLine.style.display = 'none';
-  } else {
-    arrow.style.display = 'none';
-
-    // ---- Floating target dot (inside reticle, slides toward center) ----
+  } else if (dist > LOCK_DEG) {
+    // ---- In-frame: arrow sits at the star's position, points toward center ----
     const rawX = (dAz  / MAX_DEG) * R;
     const rawY = (-dAlt / MAX_DEG) * R;
     const clampScale = Math.min(1, R / (Math.sqrt(rawX*rawX + rawY*rawY) || 1));
     const x = rawX * clampScale, y = rawY * clampScale;
 
-    indicator.style.display = 'block';
-    indicator.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-    indicator.style.opacity   = dist < LOCK_DEG ? '0' : String(0.35 + 0.65 * (dist / IN_FRAME_DEG));
+    // Angle from star-position toward center: opposite of the outer-arrow angle
+    const angleDeg = Math.atan2(-dAz, -dAlt) * (180 / Math.PI);
 
-    if (dist > 2) {
-      const lineAngle = Math.atan2(y, x) * (180 / Math.PI) + 90;
-      const lineLen   = Math.max(0, Math.sqrt(x*x + y*y) - 12);
-      guideLine.style.display   = 'block';
-      guideLine.style.height    = lineLen + 'px';
-      guideLine.style.transform = `rotate(${lineAngle}deg)`;
-    } else {
-      guideLine.style.display = 'none';
-    }
+    arrow.style.display   = 'flex';
+    arrow.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${angleDeg}deg)`;
+    degLabel.textContent  = dist.toFixed(1) + '\u00b0';
+
+    // Hide the separate dot — the arrow is now sitting on the star
+    indicator.style.display = 'none';
+    guideLine.style.display = 'none';
+  } else {
+    // Locked — hide everything
+    arrow.style.display     = 'none';
+    indicator.style.display = 'none';
+    guideLine.style.display = 'none';
   }
 }
 
