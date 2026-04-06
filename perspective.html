@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#06080e">
+<title>View from his perspective — Brian Ross Dykstra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#06080e;
+  --silver:#d8e8ff;
+  --silver-dim:#7a9ec8;
+  --frost:rgba(218,234,255,0.92);
+  --muted:rgba(140,180,228,0.45);
+  --border:rgba(110,165,225,0.13);
+  --font-serif:'EB Garamond',Georgia,serif;
+  --font-mono:'Space Mono','Courier New',monospace;
+}
+html,body{
+  width:100%;height:100%;
+  background:var(--bg);
+  overflow:hidden;
+  font-family:var(--font-mono);
+  color:var(--frost);
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+#three-canvas{
+  position:fixed;inset:0;
+  width:100%;height:100%;
+  display:block;
+  touch-action:none;
+}
+/* ===== HEADER ===== */
+#hdr{
+  position:fixed;top:0;left:0;right:0;
+  padding:52px 22px 20px;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  z-index:10;pointer-events:none;
+  background:linear-gradient(to bottom,rgba(6,8,14,0.72) 0%,transparent 100%);
+}
+#hdr>*{pointer-events:auto;}
+.trk-title{
+  font-family:var(--font-serif);
+  font-size:1.1rem;font-weight:400;
+  letter-spacing:0.02em;line-height:1.25;
+  color:var(--frost);
+}
+.trk-title em{
+  display:block;font-style:italic;
+  font-size:0.7em;color:var(--silver-dim);
+  letter-spacing:0.06em;font-family:var(--font-serif);
+}
+.btn-back{
+  font-family:var(--font-mono);font-size:0.58rem;
+  letter-spacing:0.1em;text-transform:uppercase;
+  background:rgba(8,12,26,0.75);
+  border:1px solid var(--border);color:var(--muted);
+  border-radius:2px;padding:8px 13px;cursor:pointer;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transition:border-color 0.2s,color 0.2s;
+}
+.btn-back:hover{color:var(--silver-dim);border-color:rgba(110,165,225,0.3);}
+
+/* ===== BOTTOM UI ===== */
+#bottom{
+  position:fixed;bottom:0;left:0;right:0;
+  padding:0 22px 36px;
+  z-index:10;
+  background:linear-gradient(to top,rgba(6,8,14,0.88) 0%,transparent 100%);
+  pointer-events:none;
+}
+#bottom>*{pointer-events:auto;}
+#view-label{
+  text-align:center;margin-bottom:5px;
+  font-family:var(--font-mono);font-size:0.5rem;
+  letter-spacing:0.18em;text-transform:uppercase;
+  color:rgba(140,180,228,0.52);
+  transition:color 0.8s;min-height:1.4em;
+}
+#time-display{
+  text-align:center;margin-bottom:12px;
+  font-family:var(--font-mono);font-size:0.6rem;
+  letter-spacing:0.09em;color:var(--muted);
+}
+#time-display span{color:var(--silver-dim);}
+
+/* ===== SLIDER ===== */
+#slider-wrap{
+  background:rgba(8,12,26,0.84);
+  border:1px solid var(--border);border-radius:2px;
+  padding:13px 18px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+}
+#slider-labels{
+  display:flex;justify-content:space-between;
+  font-family:var(--font-mono);font-size:0.46rem;
+  letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;
+}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:2px;
+  background:rgba(110,165,225,0.22);border-radius:1px;
+  outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:18px;height:18px;
+  border-radius:50%;background:var(--silver-dim);
+  border:1px solid rgba(180,210,255,0.55);cursor:pointer;
+  box-shadow:0 0 10px rgba(140,185,255,0.4);
+}
+input[type=range]::-moz-range-thumb{
+  width:18px;height:18px;border-radius:50%;
+  background:var(--silver-dim);border:1px solid rgba(180,210,255,0.55);
+  cursor:pointer;
+}
+
+/* ===== LEGEND ===== */
+#legend{
+  display:flex;gap:14px;align-items:center;
+  justify-content:center;flex-wrap:wrap;
+  font-family:var(--font-mono);font-size:0.46rem;
+  letter-spacing:0.1em;text-transform:uppercase;
+  color:var(--muted);margin-top:11px;
+}
+.leg-item{display:flex;align-items:center;gap:5px;transition:opacity 0.6s;}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.leg-dash{width:16px;height:0;border-top:2px dashed rgba(208,168,64,0.75);flex-shrink:0;}
+.leg-solid{width:16px;height:0;border-top:2px solid rgba(64,144,192,0.75);flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<canvas id="three-canvas"></canvas>
+
+<!-- HEADER -->
+<div id="hdr">
+  <div class="trk-title">
+    View from his perspective
+    <em>Brian Ross Dykstra &mdash; His Star in Columba</em>
+  </div>
+  <button class="btn-back" onclick="window.location.href='index.html'">&#8592; Back</button>
+</div>
+
+<!-- BOTTOM CONTROLS -->
+<div id="bottom">
+  <div id="view-label">Earth&#8217;s daily rotation</div>
+  <div id="time-display">
+    <span id="td-date">&mdash;</span>&ensp;&middot;&ensp;<span id="td-time">&mdash;</span>
+  </div>
+  <div id="slider-wrap">
+    <div id="slider-labels">
+      <span>Now</span>
+      <span>&#8592; drag to explore the year &#8594;</span>
+      <span>+1 Year</span>
+    </div>
+    <input type="range" id="time-slider" min="0" max="1000" value="0" step="1">
+  </div>
+  <div id="legend">
+    <div class="leg-item">
+      <span class="leg-dot" style="background:#ffd87a;box-shadow:0 0 5px rgba(255,216,122,0.8);"></span>
+      Brian&#8217;s Star
+    </div>
+    <div class="leg-item">
+      <span class="leg-dash"></span>
+      Daily path in sky
+    </div>
+    <div class="leg-item" id="leg-sun" style="opacity:0">
+      <span class="leg-dot" style="background:#ff9944;box-shadow:0 0 5px rgba(255,153,68,0.8);"></span>
+      The Sun
+    </div>
+    <div class="leg-item" id="leg-orbit" style="opacity:0">
+      <span class="leg-solid"></span>
+      Earth&#8217;s annual orbit
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.min.js"></script>
+<script>
+'use strict';
+// =====================================================
+//  STAR — Brian Ross Dykstra
+//  RA  06h 03m 18.55s = 90.8273°
+//  Dec −29° 39′ 39.6″ = −29.6610°
+//
+//  Coordinate system (Three.js):
+//    +X = toward vernal equinox (RA = 0)
+//    +Y = north celestial pole
+//    +Z = -(RA 6h direction)   → RA increases clockwise viewed from +Y
+//
+//  ll2v (geographic lon/lat on Earth surface):
+//    x = r·cos(lat)·cos(lon)     lon=0  → +X  (correct when GMST=0)
+//    y = r·sin(lat)
+//    z = -r·cos(lat)·sin(lon)    lon=90°E → -Z  (RA=90° direction)
+// =====================================================
+
+const D2R = Math.PI / 180;
+const R2D = 180 / Math.PI;
+const TAU = Math.PI * 2;
+
+const STAR_RA_DEG  = (6 + 3/60 + 18.55/3600) * 15;  // 90.8273°
+const STAR_DEC_DEG = -(29 + 39/60 + 39.6/3600);       // -29.6610°
+
+// Star unit vector in Three.js coords
+const STAR_DIR = (function(){
+  const ra  = STAR_RA_DEG  * D2R;
+  const dec = STAR_DEC_DEG * D2R;
+  return new THREE.Vector3(
+    Math.cos(dec) * Math.cos(ra),
+    Math.sin(dec),
+    -Math.cos(dec) * Math.sin(ra)
+  ).normalize();
+})();
+
+// =====================================================
+//  SCALE CONSTANTS  (artistic — not physically accurate)
+// =====================================================
+const EARTH_R     = 1.0;   // scene units
+const SUN_R       = 5.0;   // scene units (artistic)
+const ORBIT_R     = 55;    // 1 AU → 55 scene units
+const STAR_DIST   = 700;   // scene units to star sprite
+const DIURNAL_R   = 3.4;   // Earth radii, radius of daily-path circle
+
+// =====================================================
+//  ASTRONOMY
+// =====================================================
+function jd(date) { return date.valueOf() / 86400000 + 2440587.5; }
+
+function gmst_rad(date) {
+  const j = jd(date);
+  const T = (j - 2451545) / 36525;
+  const deg = ((280.46061837
+    + 360.98564736629 * (j - 2451545)
+    + T * T * 0.000387933
+    - T * T * T / 38710000) % 360 + 360) % 360;
+  return deg * D2R;
+}
+
+// Earth heliocentric position in Three.js coords (Sun at origin)
+function earthOrbitalPos(date) {
+  const j = jd(date);
+  const T = (j - 2451545) / 36525;
+  // Mean longitude & anomaly
+  const L = ((100.4664 + 36000.7698 * T) % 360 + 360) % 360;
+  const M = ((357.5291 + 35999.0503 * T) % 360 + 360) % 360 * D2R;
+  // Equation of center
+  const C = 1.9146 * Math.sin(M) + 0.0200 * Math.sin(2*M) + 0.0003 * Math.sin(3*M);
+  const lon_ecl = ((L + C) % 360 + 360) % 360 * D2R;
+  const eps = 23.439 * D2R; // obliquity
+
+  // Ecliptic → Three.js equatorial
+  // x_ecl → TJS_x, y_ecl·cos(eps) → TJS_?? ... let me be explicit:
+  // Equatorial: X_eq=x_ecl, Y_eq=y_ecl·cos(eps), Z_eq=y_ecl·sin(eps)
+  // Three.js:   TJS_x=X_eq, TJS_y=Z_eq, TJS_z=-Y_eq
+  const x_ecl = Math.cos(lon_ecl);
+  const y_ecl = Math.sin(lon_ecl);
+  return new THREE.Vector3(
+    x_ecl * ORBIT_R,
+    y_ecl * Math.sin(eps) * ORBIT_R,
+    -y_ecl * Math.cos(eps) * ORBIT_R
+  );
+}
+
+// Geographic longitude where the star is directly overhead
+function subStellarLon(date) {
+  const gmst_deg = gmst_rad(date) * R2D;
+  let lon = ((STAR_RA_DEG - gmst_deg) % 360 + 360) % 360;
+  if (lon > 180) lon -= 360;
+  return lon;
+}
+
+// =====================================================
+//  RENDERER + CAMERA
+// =====================================================
+const canvas = document.getElementById('three-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x06080e, 1);
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 4000);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// =====================================================
+//  BACKGROUND STARFIELD
+// =====================================================
+(function () {
+  const N = 3000;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const u = Math.random(), v = Math.random();
+    const theta = TAU * u;
+    const phi   = Math.acos(2 * v - 1);
+    const r     = 1900 + Math.random() * 600;
+    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i*3+2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xb8d0f0, size: 1.1, sizeAttenuation: false,
+    transparent: true, opacity: 0.65
+  })));
+})();
+
+// =====================================================
+//  UTILITY
+// =====================================================
+function ll2v(lon, lat, r) {
+  // Geographic lon/lat → Three.js 3D point on sphere of radius r
+  const phi = lat * D2R, lam = lon * D2R;
+  return new THREE.Vector3(
+    r * Math.cos(phi) * Math.cos(lam),
+    r * Math.sin(phi),
+    -r * Math.cos(phi) * Math.sin(lam)
+  );
+}
+
+function makeGlowTex(R, G, B, falloff) {
+  // Build a 64×64 radial glow DataTexture
+  const SZ = 64, data = new Uint8Array(SZ * SZ * 4);
+  for (let y = 0; y < SZ; y++) {
+    for (let x = 0; x < SZ; x++) {
+      const dx = x - SZ/2, dy = y - SZ/2;
+      const d = Math.sqrt(dx*dx + dy*dy) / (SZ/2);
+      const a = Math.max(0, 1 - Math.pow(d, falloff || 2)) * 255;
+      const i = (y * SZ + x) * 4;
+      data[i]=R; data[i+1]=G; data[i+2]=B; data[i+3]=a;
+    }
+  }
+  const t = new THREE.DataTexture(data, SZ, SZ, THREE.RGBAFormat);
+  t.needsUpdate = true;
+  return t;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function ss(t, lo, hi) {
+  const x = Math.max(0, Math.min(1, (t - lo) / (hi - lo)));
+  return x * x * (3 - 2 * x);
+}
+
+// =====================================================
+//  EARTH GROUP
+//  earthGroup      → moves with heliocentric orbital position
+//  earthAxisGroup  → rotates with sidereal time (inside earthGroup)
+// =====================================================
+const earthGroup     = new THREE.Group();
+const earthAxisGroup = new THREE.Group();
+earthGroup.add(earthAxisGroup);
+scene.add(earthGroup);
+
+// Dark interior
+{
+  const g = new THREE.SphereGeometry(EARTH_R * 0.997, 36, 18);
+  earthAxisGroup.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0x030510 })));
+}
+
+// Atmosphere rim (back-side glow)
+{
+  const g = new THREE.SphereGeometry(EARTH_R * 1.14, 24, 12);
+  earthAxisGroup.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    color: 0x1840a0, transparent: true, opacity: 0.07, side: THREE.BackSide
+  })));
+}
+
+// --- Lat/lon grid ---
+(function () {
+  const pts = [];
+  const STEP = 4;
+  // Latitude rings every 30° (skip equator, drawn separately)
+  for (let lat = -60; lat <= 60; lat += 30) {
+    if (lat === 0) continue;
+    for (let lon = -180; lon < 180; lon += STEP) {
+      const a = ll2v(lon,      lat, EARTH_R * 1.001);
+      const b = ll2v(lon+STEP, lat, EARTH_R * 1.001);
+      pts.push(a.x,a.y,a.z, b.x,b.y,b.z);
+    }
+  }
+  // Longitude lines every 30°
+  for (let lon = -180; lon < 180; lon += 30) {
+    for (let lat = -88; lat < 88; lat += STEP) {
+      const a = ll2v(lon, lat,      EARTH_R * 1.001);
+      const b = ll2v(lon, lat+STEP, EARTH_R * 1.001);
+      pts.push(a.x,a.y,a.z, b.x,b.y,b.z);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  earthAxisGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+    color: 0x1e3880, transparent: true, opacity: 0.55
+  })));
+})();
+
+// Equator (brighter ring)
+(function () {
+  const pts = [];
+  for (let lon = -180; lon < 180; lon += 3) {
+    const a = ll2v(lon,   0, EARTH_R * 1.001);
+    const b = ll2v(lon+3, 0, EARTH_R * 1.001);
+    pts.push(a.x,a.y,a.z, b.x,b.y,b.z);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  earthAxisGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+    color: 0x4070c8, transparent: true, opacity: 0.85
+  })));
+})();
+
+// Continent outlines
+const LAND = [
+  [[-168,71],[-100,70],[-60,48],[-67,44],[-77,40],[-80,32],[-88,30],
+   [-97,26],[-104,20],[-118,32],[-122,37],[-124,48],[-140,60],[-168,71]],
+  [[-54,83],[-14,76],[-24,68],[-44,58],[-52,62],[-64,76],[-54,83]],
+  [[-80,12],[-63,11],[-52,4],[-36,-4],[-38,-14],[-42,-22],[-50,-28],
+   [-53,-33],[-58,-38],[-65,-42],[-68,-52],[-70,-56],[-75,-52],[-80,-42],
+   [-80,-30],[-78,-8],[-80,0],[-78,8],[-80,12]],
+  [[-10,36],[0,38],[6,44],[8,44],[14,46],[20,40],[28,42],[30,40],[34,36],
+   [22,38],[14,44],[10,55],[8,58],[5,60],[8,62],[14,66],[20,70],[28,72],
+   [30,62],[28,56],[22,56],[18,58],[14,56],[10,55],[6,52],[2,50],
+   [-2,48],[-5,44],[-10,36]],
+  [[-18,14],[-16,12],[-12,8],[-8,5],[-2,5],[8,5],[14,0],[16,-4],[26,-4],
+   [34,-4],[38,-2],[40,2],[42,10],[44,12],[42,15],[40,20],[38,24],
+   [36,30],[34,32],[26,32],[18,30],[16,22],[10,18],[2,12],[-2,10],
+   [-8,12],[-16,16],[-18,14]],
+  [[26,42],[32,42],[40,38],[44,30],[52,22],[56,22],[60,24],[68,24],
+   [72,22],[72,18],[76,12],[82,22],[86,26],[90,26],[92,22],[96,18],
+   [100,4],[102,2],[108,12],[110,18],[114,22],[118,26],[120,30],[122,36],
+   [128,36],[132,42],[135,44],[138,40],[140,40],[140,46],[136,54],
+   [130,62],[128,68],[120,72],[100,72],[80,74],[60,70],[55,68],[50,62],
+   [52,56],[56,52],[60,56],[64,66],[70,68],[80,70],[68,76],[55,70],
+   [50,60],[44,54],[40,52],[38,48],[30,46],[26,44],[26,42]],
+  [[114,-22],[118,-20],[122,-14],[128,-14],[130,-12],[136,-12],[140,-14],
+   [143,-16],[146,-20],[150,-24],[153,-26],[152,-30],[150,-36],[146,-40],
+   [144,-38],[140,-36],[134,-34],[130,-32],[125,-32],[120,-32],[116,-28],
+   [114,-26],[114,-22]],
+  [[-180,-70],[-120,-70],[-60,-72],[0,-72],[60,-70],[120,-70],[180,-70]]
+];
+(function () {
+  const pts = [];
+  for (const poly of LAND) {
+    const closed = [...poly, poly[0]];
+    for (let i = 0; i < closed.length - 1; i++) {
+      const a = ll2v(closed[i][0],   closed[i][1],   EARTH_R * 1.004);
+      const b = ll2v(closed[i+1][0], closed[i+1][1], EARTH_R * 1.004);
+      pts.push(a.x,a.y,a.z, b.x,b.y,b.z);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  earthAxisGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+    color: 0x80aaff, transparent: true, opacity: 0.9
+  })));
+})();
+
+// Rotation axis line (north–south pole)
+(function () {
+  const pts = [0, -EARTH_R*1.35, 0,  0, EARTH_R*1.35, 0];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  earthAxisGroup.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+    color: 0x506090, transparent: true, opacity: 0.3
+  })));
+})();
+
+// Sub-stellar point on Earth's surface
+// (geographic location where the star is directly overhead — moves as Earth rotates)
+const ssGeo  = new THREE.SphereGeometry(0.042, 8, 8);
+const ssMat  = new THREE.MeshBasicMaterial({ color: 0xffd87a, transparent: true, opacity: 1 });
+const ssDot  = new THREE.Mesh(ssGeo, ssMat);
+earthAxisGroup.add(ssDot);
+
+// =====================================================
+//  DIURNAL PATH CIRCLE
+//  Fixed in equatorial frame (child of earthGroup, NOT earthAxisGroup).
+//  Shows the circle at the star's declination — the path the star traces
+//  in Earth's sky over one sidereal day due to Earth's rotation.
+// =====================================================
+const diurnalGroup = new THREE.Group();
+earthGroup.add(diurnalGroup);
+
+const diurnalMat = new THREE.LineBasicMaterial({
+  color: 0xd0a840, transparent: true, opacity: 0.78
+});
+(function () {
+  const dec    = STAR_DEC_DEG * D2R;
+  const rCirc  = Math.cos(dec) * DIURNAL_R * EARTH_R;
+  const hCirc  = Math.sin(dec) * DIURNAL_R * EARTH_R;
+  const N = 240, pts = [];
+  for (let i = 0; i <= N; i++) {
+    const ra = (i / N) * TAU;
+    // In equatorial → Three.js: x=cos(dec)cos(ra), y=sin(dec), z=-cos(dec)sin(ra)
+    pts.push(rCirc * Math.cos(ra), hCirc, -rCirc * Math.sin(ra));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  diurnalGroup.add(new THREE.Line(g, diurnalMat));
+})();
+
+// Bright dot marking the star's actual position on the diurnal circle
+// (fixed in world space — continents rotate beneath it)
+const starOnCircleMat = new THREE.MeshBasicMaterial({ color: 0xffd87a, transparent: true, opacity: 1 });
+const starOnCircle    = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), starOnCircleMat);
+starOnCircle.position.copy(STAR_DIR).multiplyScalar(DIURNAL_R * EARTH_R);
+diurnalGroup.add(starOnCircle);
+
+// Faint spoke from Earth center toward the star (orientation guide)
+const spokeMat = new THREE.LineBasicMaterial({ color: 0xd0a840, transparent: true, opacity: 0.16 });
+(function () {
+  const end = STAR_DIR.clone().multiplyScalar(DIURNAL_R * EARTH_R);
+  const pts = new Float32Array([0,0,0, end.x, end.y, end.z]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+  diurnalGroup.add(new THREE.Line(g, spokeMat));
+})();
+
+// =====================================================
+//  STAR SPRITE (bright point far in star's direction)
+// =====================================================
+const starSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeGlowTex(210, 195, 255, 2),
+  transparent: true, opacity: 1, depthWrite: false
+}));
+starSprite.scale.set(5, 5, 1);
+starSprite.position.copy(STAR_DIR).multiplyScalar(STAR_DIST);
+scene.add(starSprite);
+
+// =====================================================
+//  SUN  (Sun at world origin — heliocentric scene)
+// =====================================================
+const sunGroup = new THREE.Group(); // always at origin
+scene.add(sunGroup);
+
+const sunWireMat = new THREE.MeshBasicMaterial({
+  color: 0xff8822, wireframe: true, transparent: true, opacity: 0
+});
+sunGroup.add(new THREE.Mesh(new THREE.SphereGeometry(SUN_R, 14, 9), sunWireMat));
+
+const sunGlowMat = new THREE.MeshBasicMaterial({
+  color: 0xff9933, transparent: true, opacity: 0, side: THREE.BackSide
+});
+sunGroup.add(new THREE.Mesh(new THREE.SphereGeometry(SUN_R * 2.4, 14, 9), sunGlowMat));
+
+const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: makeGlowTex(255, 155, 55, 1.2),
+  transparent: true, opacity: 0, depthWrite: false
+}));
+sunSprite.scale.set(24, 24, 1);
+scene.add(sunSprite); // at origin
+
+// =====================================================
+//  EARTH ORBIT PATH  (annual ellipse around Sun)
+// =====================================================
+const orbitMat = new THREE.LineBasicMaterial({
+  color: 0x4090c0, transparent: true, opacity: 0
+});
+(function () {
+  const eps = 23.439 * D2R;
+  const N = 360, pts = [];
+  for (let i = 0; i <= N; i++) {
+    const theta = (i / N) * TAU;
+    // Near-circular orbit (e=0.0167 ≈ circle).  Ecliptic coords:
+    const x_ecl = ORBIT_R * Math.cos(theta);
+    const y_ecl = ORBIT_R * Math.sin(theta);
+    // → Three.js equatorial
+    pts.push(x_ecl, y_ecl * Math.sin(eps), -y_ecl * Math.cos(eps));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  scene.add(new THREE.Line(g, orbitMat));
+})();
+
+// Star direction ray from Earth (shows which way star is; visible in solar view)
+const rayMat = new THREE.LineBasicMaterial({ color: 0xd0a840, transparent: true, opacity: 0 });
+(function () {
+  const L = 80;
+  const pts = new Float32Array([
+    0,0,0,
+    STAR_DIR.x*L, STAR_DIR.y*L, STAR_DIR.z*L
+  ]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+  earthGroup.add(new THREE.Line(g, rayMat));  // moves with Earth
+})();
+
+// =====================================================
+//  CAMERA CONTROL  (spherical orbit, mouse + touch)
+// =====================================================
+let camTheta  = Math.PI * 0.3;   // horizontal angle
+let camPhi    = Math.PI * 0.34;  // vertical angle from pole
+let isDragging = false;
+let autoOrbit  = true;
+let dragStart  = {x:0, y:0};
+let dragStartTheta = 0, dragStartPhi = 0;
+let autoResumeTimer = null;
+
+function startDrag(x, y) {
+  isDragging = true;
+  autoOrbit  = false;
+  clearTimeout(autoResumeTimer);
+  dragStart      = {x, y};
+  dragStartTheta = camTheta;
+  dragStartPhi   = camPhi;
+}
+function moveDrag(x, y) {
+  if (!isDragging) return;
+  camTheta = dragStartTheta - (x - dragStart.x) * 0.0055;
+  camPhi   = Math.max(0.08, Math.min(Math.PI - 0.08,
+               dragStartPhi - (y - dragStart.y) * 0.0055));
+}
+function endDrag() {
+  isDragging = false;
+  autoResumeTimer = setTimeout(() => { autoOrbit = true; }, 4000);
+}
+
+canvas.addEventListener('mousedown',  e => startDrag(e.clientX, e.clientY));
+window.addEventListener('mousemove',  e => moveDrag(e.clientX, e.clientY));
+window.addEventListener('mouseup',    endDrag);
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+}, {passive: false});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+}, {passive: false});
+canvas.addEventListener('touchend', endDrag);
+
+// =====================================================
+//  SLIDER  (NOW → +1 year)
+// =====================================================
+const slider   = document.getElementById('time-slider');
+const NOW_MS   = Date.now();
+const YEAR_MS  = 365.25 * 24 * 3600 * 1000;
+
+function currentDate() {
+  return new Date(NOW_MS + (slider.value / 1000) * YEAR_MS);
+}
+function sliderT() { return slider.value / 1000; }
+
+// Blend: 0 = close Earth view, 1 = full solar system view
+// Transition zone (0.15 → 0.65) is where both views coexist
+function calcBlend(t) {
+  if (t < 0.15) return 0;
+  if (t > 0.65) return 1;
+  const x = (t - 0.15) / 0.50;
+  return x * x * (3 - 2 * x);
+}
+
+// =====================================================
+//  RENDER LOOP
+// =====================================================
+let frame = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  frame++;
+
+  const date = currentDate();
+  const t    = sliderT();
+  const b    = calcBlend(t);
+
+  // --- UI text (every other frame to save cost) ---
+  if (frame % 2 === 0) {
+    const ds = date.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    const ts = date.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit'});
+    document.getElementById('td-date').textContent = ds;
+    document.getElementById('td-time').textContent = ts;
+
+    const lbl = document.getElementById('view-label');
+    if (b < 0.2)        lbl.textContent = 'Earth\u2019s daily rotation';
+    else if (b < 0.8)   lbl.textContent = 'Zooming to the solar scale\u2026';
+    else                lbl.textContent = 'Earth\u2019s annual orbit around the Sun';
+
+    document.getElementById('leg-sun').style.opacity   = b.toFixed(3);
+    document.getElementById('leg-orbit').style.opacity = b.toFixed(3);
+  }
+
+  // --- Auto-orbit camera ---
+  if (autoOrbit && !isDragging) camTheta += 0.0022;
+
+  // --- Earth sidereal rotation ---
+  const gmst = gmst_rad(date);
+  earthAxisGroup.rotation.y = gmst;
+
+  // --- Earth orbital position ---
+  const ePos = earthOrbitalPos(date);
+  earthGroup.position.copy(ePos);
+
+  // --- Earth scale: grows slightly in solar view so it's still visible ---
+  const eScale = lerp(1.0, 3.2, b);
+  earthGroup.scale.setScalar(eScale);
+
+  // --- Sub-stellar point on Earth's surface ---
+  // Geographic location where star is directly overhead
+  const ssLon = subStellarLon(date);
+  ssDot.position.copy(ll2v(ssLon, STAR_DEC_DEG, EARTH_R * 1.012));
+  // Proof: in world coords this equals STAR_DIR × EARTH_R regardless of GMST
+  // (Earth rotates, dot stays under the star, continents sweep beneath it)
+
+  // --- Camera ---
+  // In Earth view: orbit closely around Earth (target = ePos)
+  // In solar view: orbit widely around Sun/origin (target = origin)
+  // In between: both views coexist as camera smoothly transitions
+
+  const closeR = 4.4, farR = 215;
+  const camR   = lerp(closeR, farR, b);
+
+  // Target lerps from Earth position → Sun (origin)
+  const tx = ePos.x * (1 - b);
+  const ty = ePos.y * (1 - b);
+  const tz = ePos.z * (1 - b);
+
+  // Spherical offset from target
+  const ox = camR * Math.sin(camPhi) * Math.sin(camTheta);
+  const oy = camR * Math.cos(camPhi);
+  const oz = camR * Math.sin(camPhi) * Math.cos(camTheta);
+
+  camera.position.set(tx + ox, ty + oy, tz + oz);
+  camera.lookAt(tx, ty, tz);
+
+  // --- Material opacity transitions ---
+
+  // Diurnal circle: visible in Earth view, fades as we zoom out
+  // Star's direction spoke: same
+  const diurnalA = lerp(0.78, 0, ss(b, 0.28, 0.70));
+  diurnalMat.opacity      = diurnalA;
+  starOnCircleMat.opacity = lerp(1.0, 0, ss(b, 0.30, 0.72));
+  spokeMat.opacity        = lerp(0.16, 0, ss(b, 0.28, 0.68));
+  ssMat.opacity           = lerp(1.0,  0, ss(b, 0.30, 0.72));
+
+  // Sun: fades in during transition, full in solar view
+  const sunA = ss(b, 0.12, 0.55);
+  sunWireMat.opacity   = sunA * 0.62;
+  sunGlowMat.opacity   = sunA * 0.15;
+  sunSprite.material.opacity = sunA * 0.88;
+
+  // Orbit line: appears as we zoom out
+  orbitMat.opacity = ss(b, 0.22, 0.62) * 0.78;
+
+  // Star direction ray from Earth: appears in solar view
+  rayMat.opacity = ss(b, 0.38, 0.72) * 0.65;
+
+  // Star sprite grows so it stays visible at all zoom levels
+  const sc = lerp(4.5, 15, b);
+  starSprite.scale.set(sc, sc, 1);
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
