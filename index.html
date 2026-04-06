@@ -497,22 +497,47 @@ body::before {
 }
 
 /* ===== BELOW HORIZON ===== */
-#hz-warn {
-  position: fixed;
-  bottom: 56%;
-  left: 50%; transform: translateX(-50%);
-  background: rgba(224,112,80,0.1);
-  border: 1px solid rgba(224,112,80,0.3);
-  border-radius: 2px;
-  padding: 8px 18px;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--coral);
-  white-space: nowrap;
+#hz-warn { display: none; }
+
+#hz-countdown {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(8, 12, 26, 0.92);
+  border: 1px solid rgba(224,112,80,0.28);
+  border-radius: 3px;
+  padding: 20px 30px 18px;
+  text-align: center;
   z-index: 15;
   display: none;
+  pointer-events: none;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  min-width: 210px;
+}
+#hz-countdown-lbl {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--coral);
+  margin-bottom: 10px;
+  opacity: 0.85;
+}
+#hz-countdown-time {
+  font-family: var(--font-mono);
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--frost);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+#hz-countdown-at {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.07em;
+  color: var(--muted);
 }
 
 /* ===== PERMISSION ERROR ===== */
@@ -631,6 +656,11 @@ body::before {
   </div>
 
   <div class="aim">
+    <div id="hz-countdown">
+      <div id="hz-countdown-lbl">Star is Below the Horizon</div>
+      <div id="hz-countdown-time">--:--:--</div>
+      <div id="hz-countdown-at"></div>
+    </div>
     <div class="reticle" id="reticle">
       <div class="ring ring-1" id="r1"></div>
       <div class="ring ring-2" id="r2"></div>
@@ -986,6 +1016,57 @@ function altAz(star, latDeg, lonDeg, date) {
 // =====================================================
 //  RISE TIME
 // =====================================================
+let _nextRiseCache = null, _nextRiseCacheAt = 0;
+
+function nextRise(star, latDeg, lonDeg) {
+  if (latDeg === null) return null;
+  const now = Date.now();
+  // Return cached value if still in the future and computed within the last minute
+  if (_nextRiseCache && _nextRiseCache > now && now - _nextRiseCacheAt < 60000) {
+    return _nextRiseCache;
+  }
+  _nextRiseCacheAt = now;
+  // Walk forward in 10-minute steps up to 24 hours looking for an upward crossing
+  let t0 = now;
+  let alt0 = altAz(star, latDeg, lonDeg, new Date(t0)).alt;
+  for (let step = 10; step <= 24 * 60; step += 10) {
+    const t1 = now + step * 60000;
+    const alt1 = altAz(star, latDeg, lonDeg, new Date(t1)).alt;
+    if (alt0 < 0 && alt1 >= 0) {
+      // Refine with binary search
+      let lo = t0, hi = t1;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (altAz(star, latDeg, lonDeg, new Date(mid)).alt < 0) lo = mid; else hi = mid;
+      }
+      _nextRiseCache = new Date((lo + hi) / 2);
+      return _nextRiseCache;
+    }
+    t0 = t1; alt0 = alt1;
+  }
+  _nextRiseCache = null;
+  return null;
+}
+
+function updateCountdown(belowHorizon) {
+  const box = document.getElementById('hz-countdown');
+  if (!belowHorizon || lat === null) { box.style.display = 'none'; return; }
+  const rise = nextRise(STAR, lat, lon);
+  if (!rise) { box.style.display = 'none'; return; }
+  const msLeft = rise - Date.now();
+  if (msLeft <= 0) { box.style.display = 'none'; _nextRiseCache = null; return; }
+  const totalSec = Math.floor(msLeft / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const timeStr = (h > 0 ? h + ':' : '') +
+    String(m).padStart(h > 0 ? 2 : 1, '0') + ':' +
+    String(s).padStart(2, '0');
+  document.getElementById('hz-countdown-time').textContent = timeStr;
+  document.getElementById('hz-countdown-at').textContent =
+    'Rises at ' + rise.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  box.style.display = 'block';
+}
 
 // =====================================================
 //  TRAJECTORY
@@ -1117,7 +1198,7 @@ function loop() {
   document.getElementById('v-salt').textContent = alt.toFixed(1) + '\u00b0';
 
   const belowHorizon = alt < -0.5;
-  document.getElementById('hz-warn').style.display = belowHorizon ? 'block' : 'none';
+  updateCountdown(belowHorizon);
 
   const status = document.getElementById('status');
 
@@ -1245,14 +1326,14 @@ function updateAimArrow(dAz, dAlt) {
   const rcx = rRect2.left + rRect2.width  / 2;
   const rcy = rRect2.top  + rRect2.height / 2;
 
-  // ---- Seek arrow (outside reticle, orbits rim pointing INWARD toward center) ----
+  // ---- Seek arrow (outside reticle, tip points OUTWARD toward the star) ----
   if (dist > IN_FRAME_DEG) {
-    const angleRad = Math.atan2(dAz, dAlt);         // direction from center toward star
-    const arrowR   = R + 36;                         // px from reticle center to arrow center
+    const angleRad = Math.atan2(dAz, dAlt);   // direction from center toward star
+    const arrowR   = R + 36;                   // px from reticle center to arrow center
     const tx = Math.sin(angleRad) * arrowR;
     const ty = -Math.cos(angleRad) * arrowR;
-    // Arrow tip points INWARD (toward center = "bring me here") — rotate 180° from star direction
-    const angleDeg = (angleRad * (180 / Math.PI) + 180) % 360;
+    // Arrow tip points OUTWARD toward star (no +180 flip)
+    const angleDeg = (angleRad * (180 / Math.PI) + 360) % 360;
     arrow.style.left      = rcx + 'px';
     arrow.style.top       = rcy + 'px';
     arrow.style.display   = 'flex';
@@ -1260,31 +1341,13 @@ function updateAimArrow(dAz, dAlt) {
     degLabel.textContent  = Math.round(dist) + '\u00b0';
     indicator.style.display = 'none';
     guideLine.style.display = 'none';
-  } else if (dist > LOCK_DEG) {
-    // ---- In-frame: arrow at star position, tip points toward center ----
-    const rawX = (dAz  / MAX_DEG) * R;
-    const rawY = (-dAlt / MAX_DEG) * R;
-    const clampScale = Math.min(1, R / (Math.sqrt(rawX*rawX + rawY*rawY) || 1));
-    const x = rawX * clampScale, y = rawY * clampScale;
-
-    // Tip points toward center (from star position inward)
-    const angleDeg = Math.atan2(-dAz, -dAlt) * (180 / Math.PI);
-
-    arrow.style.left      = rcx + 'px';
-    arrow.style.top       = rcy + 'px';
-    arrow.style.display   = 'flex';
-    arrow.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotate(${angleDeg}deg)`;
-    degLabel.textContent  = dist.toFixed(1) + '\u00b0';
-
-    // Hide the separate dot — the arrow is now sitting on the star
-    indicator.style.display = 'none';
-    guideLine.style.display = 'none';
   } else {
-    // Locked — hide everything
+    // Star is within crosshair range — hide the arrow entirely
     arrow.style.display     = 'none';
     indicator.style.display = 'none';
     guideLine.style.display = 'none';
   }
+
 }
 
 function hideAimArrow() {
