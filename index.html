@@ -193,6 +193,12 @@ body::before {
 .btn-begin:hover::before, .btn-begin:active::before { opacity: 1; }
 .btn-begin:hover { box-shadow: 0 0 18px rgba(140,185,255,0.18); }
 .btn-begin:active { transform: scale(0.98); }
+.btn-perspective {
+  border-color: rgba(122,158,200,0.55);
+  color: var(--silver-dim);
+  opacity: 0.82;
+}
+.btn-perspective:hover { opacity: 1; }
 
 .perm-note {
   font-family: var(--font-mono);
@@ -673,19 +679,14 @@ body::before {
 
   <button class="btn-begin" id="btn-begin">Find His Star</button>
 
+  <button class="btn-begin btn-perspective" onclick="window.location.href='perspective.html'">
+    View from his perspective
+  </button>
+
   <div class="perm-note">
     Requires location and device motion.<br>
     Open in Safari on iPhone and allow permissions when prompted.
   </div>
-
-  <a href="perspective.html" style="
-    font-family:var(--font-mono);font-size:0.54rem;
-    letter-spacing:0.12em;text-transform:uppercase;
-    color:var(--silver-dim);text-decoration:none;
-    opacity:0.6;transition:opacity 0.2s;
-  " onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.6'">
-    View from his perspective &#8594;
-  </a>
 </div>
 
 <!-- ===================================================
