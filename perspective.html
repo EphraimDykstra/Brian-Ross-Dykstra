@@ -41,26 +41,28 @@ html,body{
 #hdr{
   position:fixed;top:0;left:0;right:0;
   padding:52px 22px 20px;
-  display:flex;justify-content:space-between;align-items:flex-start;
   z-index:10;pointer-events:none;
   background:linear-gradient(to bottom,rgba(6,8,14,0.72) 0%,transparent 100%);
 }
-#hdr>*{pointer-events:auto;}
 .trk-title{
   font-family:var(--font-serif);
   font-size:1.1rem;font-weight:400;
   letter-spacing:0.02em;line-height:1.25;
   color:var(--frost);
+  max-width:calc(100% - 90px); /* always leave room for back button */
 }
 .trk-title em{
   display:block;font-style:italic;
   font-size:0.7em;color:var(--silver-dim);
   letter-spacing:0.06em;font-family:var(--font-serif);
 }
+/* Back button: anchored to top-right, independent of title length */
 .btn-back{
+  position:fixed;top:52px;right:22px;
+  z-index:20;pointer-events:auto;
   font-family:var(--font-mono);font-size:0.58rem;
   letter-spacing:0.1em;text-transform:uppercase;
-  background:rgba(8,12,26,0.75);
+  background:rgba(8,12,26,0.80);
   border:1px solid var(--border);color:var(--muted);
   border-radius:2px;padding:8px 13px;cursor:pointer;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
@@ -226,7 +228,6 @@ const EARTH_R     = 1.0;   // scene units
 const SUN_R       = 5.0;   // scene units (artistic)
 const ORBIT_R     = 55;    // 1 AU → 55 scene units
 const STAR_DIST   = 700;   // scene units to star sprite
-const DIURNAL_R   = 3.4;   // Earth radii, radius of daily-path circle
 
 // =====================================================
 //  ASTRONOMY
@@ -266,14 +267,6 @@ function earthOrbitalPos(date) {
     y_ecl * Math.sin(eps) * ORBIT_R,
     -y_ecl * Math.cos(eps) * ORBIT_R
   );
-}
-
-// Geographic longitude where the star is directly overhead
-function subStellarLon(date) {
-  const gmst_deg = gmst_rad(date) * R2D;
-  let lon = ((STAR_RA_DEG - gmst_deg) % 360 + 360) % 360;
-  if (lon > 180) lon -= 360;
-  return lon;
 }
 
 // =====================================================
@@ -477,57 +470,6 @@ const LAND = [
   })));
 })();
 
-// Sub-stellar point on Earth's surface
-// (geographic location where the star is directly overhead — moves as Earth rotates)
-const ssGeo  = new THREE.SphereGeometry(0.042, 8, 8);
-const ssMat  = new THREE.MeshBasicMaterial({ color: 0xffd87a, transparent: true, opacity: 1 });
-const ssDot  = new THREE.Mesh(ssGeo, ssMat);
-earthAxisGroup.add(ssDot);
-
-// =====================================================
-//  DIURNAL PATH CIRCLE
-//  Fixed in equatorial frame (child of earthGroup, NOT earthAxisGroup).
-//  Shows the circle at the star's declination — the path the star traces
-//  in Earth's sky over one sidereal day due to Earth's rotation.
-// =====================================================
-const diurnalGroup = new THREE.Group();
-earthGroup.add(diurnalGroup);
-
-const diurnalMat = new THREE.LineBasicMaterial({
-  color: 0xd0a840, transparent: true, opacity: 0.78
-});
-(function () {
-  const dec    = STAR_DEC_DEG * D2R;
-  const rCirc  = Math.cos(dec) * DIURNAL_R * EARTH_R;
-  const hCirc  = Math.sin(dec) * DIURNAL_R * EARTH_R;
-  const N = 240, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const ra = (i / N) * TAU;
-    // In equatorial → Three.js: x=cos(dec)cos(ra), y=sin(dec), z=-cos(dec)sin(ra)
-    pts.push(rCirc * Math.cos(ra), hCirc, -rCirc * Math.sin(ra));
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  diurnalGroup.add(new THREE.Line(g, diurnalMat));
-})();
-
-// Bright dot marking the star's actual position on the diurnal circle
-// (fixed in world space — continents rotate beneath it)
-const starOnCircleMat = new THREE.MeshBasicMaterial({ color: 0xffd87a, transparent: true, opacity: 1 });
-const starOnCircle    = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), starOnCircleMat);
-starOnCircle.position.copy(STAR_DIR).multiplyScalar(DIURNAL_R * EARTH_R);
-diurnalGroup.add(starOnCircle);
-
-// Faint spoke from Earth center toward the star (orientation guide)
-const spokeMat = new THREE.LineBasicMaterial({ color: 0xd0a840, transparent: true, opacity: 0.16 });
-(function () {
-  const end = STAR_DIR.clone().multiplyScalar(DIURNAL_R * EARTH_R);
-  const pts = new Float32Array([0,0,0, end.x, end.y, end.z]);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pts, 3));
-  diurnalGroup.add(new THREE.Line(g, spokeMat));
-})();
-
 // =====================================================
 //  STAR SPRITE (bright point far in star's direction)
 // =====================================================
@@ -619,7 +561,7 @@ function startDrag(x, y) {
 function moveDrag(x, y) {
   if (!isDragging) return;
   camTheta = dragStartTheta - (x - dragStart.x) * 0.0055;
-  camPhi   = Math.max(0.08, Math.min(Math.PI - 0.08,
+  camPhi   = Math.max(0.08, Math.min(1.48,
                dragStartPhi - (y - dragStart.y) * 0.0055));
 }
 function endDrag() {
@@ -705,13 +647,6 @@ function animate() {
   const eScale = lerp(1.0, 3.2, b);
   earthGroup.scale.setScalar(eScale);
 
-  // --- Sub-stellar point on Earth's surface ---
-  // Geographic location where star is directly overhead
-  const ssLon = subStellarLon(date);
-  ssDot.position.copy(ll2v(ssLon, STAR_DEC_DEG, EARTH_R * 1.012));
-  // Proof: in world coords this equals STAR_DIR × EARTH_R regardless of GMST
-  // (Earth rotates, dot stays under the star, continents sweep beneath it)
-
   // --- Camera ---
   // In Earth view: orbit closely around Earth (target = ePos)
   // In solar view: orbit widely around Sun/origin (target = origin)
@@ -731,17 +666,10 @@ function animate() {
   const oz = camR * Math.sin(camPhi) * Math.cos(camTheta);
 
   camera.position.set(tx + ox, ty + oy, tz + oz);
+  camera.up.set(0, 1, 0);
   camera.lookAt(tx, ty, tz);
 
   // --- Material opacity transitions ---
-
-  // Diurnal circle: visible in Earth view, fades as we zoom out
-  // Star's direction spoke: same
-  const diurnalA = lerp(0.78, 0, ss(b, 0.28, 0.70));
-  diurnalMat.opacity      = diurnalA;
-  starOnCircleMat.opacity = lerp(1.0, 0, ss(b, 0.30, 0.72));
-  spokeMat.opacity        = lerp(0.16, 0, ss(b, 0.28, 0.68));
-  ssMat.opacity           = lerp(1.0,  0, ss(b, 0.30, 0.72));
 
   // Sun: fades in during transition, full in solar view
   const sunA = ss(b, 0.12, 0.55);
