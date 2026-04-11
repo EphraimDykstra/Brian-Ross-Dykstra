@@ -542,20 +542,14 @@ body::before {
 #hz-warn { display: none; }
 
 #hz-countdown {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
+  width: 100%;
   background: rgba(8, 12, 26, 0.92);
-  border: 1px solid rgba(224,112,80,0.28);
-  border-radius: 3px;
-  padding: 20px 30px 18px;
+  border-top: 1px solid rgba(224,112,80,0.28);
+  border-bottom: 1px solid rgba(224,112,80,0.28);
+  padding: 14px 30px 12px;
   text-align: center;
-  z-index: 15;
   display: none;
   pointer-events: none;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  min-width: 210px;
 }
 #hz-countdown-lbl {
   font-family: var(--font-mono);
@@ -705,11 +699,6 @@ body::before {
   </div>
 
   <div class="aim">
-    <div id="hz-countdown">
-      <div id="hz-countdown-lbl">Star is Below the Horizon</div>
-      <div id="hz-countdown-time">--:--:--</div>
-      <div id="hz-countdown-at"></div>
-    </div>
     <div class="reticle" id="reticle">
       <div class="ring ring-1" id="r1"></div>
       <div class="ring ring-2" id="r2"></div>
@@ -750,6 +739,12 @@ body::before {
       </div>
       <div class="dot" id="dot"></div>
     </div>
+  </div>
+
+  <div id="hz-countdown">
+    <div id="hz-countdown-lbl">Star is Below the Horizon</div>
+    <div id="hz-countdown-time">--:--:--</div>
+    <div id="hz-countdown-at"></div>
   </div>
 
   <div class="panel">
