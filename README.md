@@ -2,7 +2,9 @@
 
 A web application to locate and track the star named in memory of **Brian Ross Dykstra**, located in the constellation Columba.
 
-Point your iPhone at the sky, follow the on-screen reticle, and lock onto his star in real time.
+Point your iPhone at the sky, follow the on-screen reticle, and lock onto his star in real time. 
+
+here is the link: https://brianrossdykstra.netlify.app
 
 ---
 
