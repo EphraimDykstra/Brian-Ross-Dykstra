@@ -1,11 +1,15 @@
-const CACHE = 'brian-star-v1';
+const CACHE = 'brian-star-v2';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
+  './favicon.ico',
+  './favicon-32.png',
   './icon-180.png',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './icon-maskable-512.png',
+  './og-image.png'
 ];
 
 self.addEventListener('install', (event) => {
