@@ -1592,10 +1592,12 @@ function stopCam() {
 
   document.getElementById('install-close').addEventListener('click', dismiss);
 
-  // Auto-show after a brief dwell so users see the app first
-  window.addEventListener('load', () => {
-    setTimeout(showPrompt, 7000);
-  });
+  // Show immediately on load
+  if (document.readyState === 'complete') {
+    showPrompt();
+  } else {
+    window.addEventListener('load', showPrompt);
+  }
 
   // Register service worker (offline support)
   if ('serviceWorker' in navigator) {
